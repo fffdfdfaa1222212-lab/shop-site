@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Создай интернет-магазин за 1 день | ShopPlatform</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      color: #1a1a2e;
+      line-height: 1.6;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+
+    /* Header */
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 40px; background: #fff; border-bottom: 1px solid #eee;
+    }
+    .logo { font-size: 24px; font-weight: 800; color: #6c63ff; }
+    .logo span { color: #ff6584; }
+    nav a { margin-left: 24px; text-decoration: none; color: #555; font-weight: 500; font-size: 14px; }
+    nav a:hover { color: #6c63ff; }
+    .btn-login { color: #6c63ff !important; }
+    .btn-primary {
+      background: linear-gradient(135deg, #6c63ff, #ff6584);
+      color: #fff !important; padding: 10px 24px; border-radius: 8px;
+      font-weight: 600;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+
+    /* Hero */
+    .hero {
+      background: linear-gradient(135deg, #f5f3ff 0%, #fff0f3 100%);
+      padding: 80px 0; text-align: center;
+    }
+    .hero h1 {
+      font-size: 52px; font-weight: 800; max-width: 800px; margin: 0 auto 16px;
+      background: linear-gradient(135deg, #6c63ff, #ff6584);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p { font-size: 20px; color: #666; margin-bottom: 12px; }
+    .hero .sub { font-size: 16px; color: #999; margin-bottom: 40px; }
+    .hero-buttons { display: flex; gap: 16px; justify-content: center; }
+    .hero-buttons .btn-primary { padding: 14px 40px; font-size: 16px; }
+    .btn-secondary {
+      padding: 14px 40px; font-size: 16px; border: 2px solid #6c63ff; color: #6c63ff;
+      border-radius: 8px; font-weight: 600; text-decoration: none;
+    }
+    .btn-secondary:hover { background: #f5f3ff; }
+    .hero-features {
+      display: flex; justify-content: center; gap: 40px; margin-top: 48px;
+      flex-wrap: wrap;
+    }
+    .hero-features span { font-size: 14px; color: #555; display: flex; align-items: center; gap: 8px; }
+    .hero-features span::before { content: "✓"; color: #6c63ff; font-weight: 700; }
+    .free-badge {
+      display: inline-block; background: #e8f5e9; color: #2e7d32; padding: 6px 16px;
+      border-radius: 20px; font-size: 14px; font-weight: 600; margin-bottom: 16px;
+    }
+
+    /* Sections */
+    section { padding: 80px 0; }
+    .section-title { font-size: 36px; font-weight: 800; text-align: center; margin-bottom: 16px; }
+    .section-sub { text-align: center; color: #888; font-size: 18px; margin-bottom: 48px; }
+
+    /* Solutions */
+    .solutions-grid {
+      display: flex; gap: 24px; overflow-x: auto; padding-bottom: 16px;
+    }
+    .solution-card {
+      min-width: 280px; background: #fff; border-radius: 16px; padding: 32px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #f0f0f0;
+      flex-shrink: 0;
+    }
+    .solution-card .icon { font-size: 40px; margin-bottom: 16px; }
+    .solution-card h3 { font-size: 18px; margin-bottom: 8px; }
+    .solution-card p { font-size: 14px; color: #888; }
+    .tabs {
+      display: flex; justify-content: center; gap: 8px; margin-bottom: 32px;
+    }
+    .tab {
+      padding: 8px 24px; border-radius: 20px; border: 1px solid #ddd;
+      background: #fff; cursor: pointer; font-size: 14px; font-weight: 500;
+    }
+    .tab.active { background: #6c63ff; color: #fff; border-color: #6c63ff; }
+
+    /* Features */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px;
+    }
+    .feature-card {
+      background: #fff; border-radius: 16px; padding: 28px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.04); border: 1px solid #f5f5f5;
+    }
+    .feature-card .icon { font-size: 32px; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 16px; margin-bottom: 8px; }
+    .feature-card p { font-size: 14px; color: #888; line-height: 1.5; }
+
+    /* Integrations */
+    .integrations {
+      background: #fafaff;
+    }
+    .integration-logos {
+      display: flex; justify-content: center; gap: 32px; flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+    .integration-logos div {
+      width: 80px; height: 80px; background: #fff; border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06); font-size: 12px; color: #888;
+      font-weight: 600; border: 1px solid #eee;
+    }
+
+    /* CTA */
+    .cta {
+      background: linear-gradient(135deg, #6c63ff, #ff6584);
+      text-align: center; padding: 80px 0; color: #fff;
+    }
+    .cta h2 { font-size: 40px; font-weight: 800; margin-bottom: 12px; }
+    .cta p { font-size: 18px; opacity: 0.9; margin-bottom: 32px; }
+    .cta .btn-primary {
+      background: #fff; color: #6c63ff !important; padding: 14px 48px; font-size: 16px;
+    }
+    .cta .free-badge { background: rgba(255,255,255,0.2); color: #fff; }
+
+    /* Footer */
+    footer {
+      background: #1a1a2e; color: #aaa; padding: 40px 0; text-align: center;
+      font-size: 14px;
+    }
+    footer a { color: #aaa; text-decoration: none; margin: 0 12px; }
+    footer a:hover { color: #fff; }
+
+    @media (max-width: 768px) {
+      header { flex-direction: column; gap: 12px; }
+      nav a { margin: 0 8px; }
+      .hero h1 { font-size: 32px; }
+      .hero-features { flex-direction: column; align-items: center; gap: 12px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .hero-buttons { flex-direction: column; align-items: center; }
+      section { padding: 48px 0; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Shop<span>Platform</span></div>
+  <nav>
+    <a href="#">Возможности</a>
+    <a href="#">Тарифы</a>
+    <a href="#">Шаблоны</a>
+    <a href="#">Интеграции</a>
+    <a href="#" class="btn-login">Войти</a>
+    <a href="#" class="btn-primary">Создать магазин</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <div class="free-badge">Первые 7 дней бесплатно</div>
+    <h1>Создай интернет-магазин с нуля за 1 день</h1>
+    <p>Загрузи товары и начни продавать уже сегодня</p>
+    <p class="sub">Без программистов, дизайнеров и лишних затрат</p>
+    <div class="hero-buttons">
+      <a href="#" class="btn-primary">Попробовать бесплатно</a>
+      <a href="#" class="btn-secondary">Узнать больше</a>
+    </div>
+    <div class="hero-features">
+      <span>Без программистов и дизайнеров</span>
+      <span>Более 20 готовых шаблонов</span>
+      <span>Интеграции с сервисами учёта и доставки</span>
+      <span>Безлимитный трафик и место на сервере</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <h2 class="section-title">Выбирайте из каталога готовых решений</h2>
+    <p class="section-sub">Более 20 профессиональных шаблонов для вашего бизнеса</p>
+    <div class="tabs">
+      <span class="tab active">Одежда и аксессуары</span>
+      <span class="tab">Электроника</span>
+      <span class="tab">Продукты</span>
+      <span class="tab">Красота и здоровье</span>
+    </div>
+    <div class="solutions-grid">
+      <div class="solution-card">
+        <div class="icon">👕</div>
+        <h3>Магазин одежды</h3>
+        <p>Готовый шаблон с каталогом, корзиной и фильтрами по размерам и цветам</p>
+      </div>
+      <div class="solution-card">
+        <div class="icon">📱</div>
+        <h3>Электроника</h3>
+        <p>Витрина с характеристиками, сравнением товаров и отзывами</p>
+      </div>
+      <div class="solution-card">
+        <div class="icon">💄</div>
+        <h3>Косметика</h3>
+        <p>Каталог с фильтрами по брендам, составу и типу кожи</p>
+      </div>
+      <div class="solution-card">
+        <div class="icon">🍕</div>
+        <h3>Продукты и еда</h3>
+        <p>Корзина с доставкой, зонами и временными слотами</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="background: #fafaff;">
+  <div class="container">
+    <h2 class="section-title">Все инструменты продаж уже внутри</h2>
+    <p class="section-sub">Используйте широкий функционал для управления бизнесом</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="icon">📦</div>
+        <h3>Импорт товаров</h3>
+        <p>Загружайте товары из разных типов файлов или систем складского учёта</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">💬</div>
+        <h3>Коммуникации с клиентами</h3>
+        <p>Ведите диалоги с клиентами из разных каналов в едином окне</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🤖</div>
+        <h3>ИИ-генератор карточек товара</h3>
+        <p>Используйте встроенный генератор текста на базе искусственного интеллекта</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🔍</div>
+        <h3>Поисковая оптимизация</h3>
+        <p>Редактируйте SEO-параметры товаров для лучшей поисковой выдачи</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📊</div>
+        <h3>Товарный учёт</h3>
+        <p>Контролируйте остатки товаров на сайте и складе в реальном времени</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">📈</div>
+        <h3>Аналитика продаж</h3>
+        <p>Оценивайте ключевые показатели для увеличения прибыли</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🔔</div>
+        <h3>Уведомления о заказе</h3>
+        <p>Автоматические уведомления клиентов через смс, почту и мессенджеры</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">💳</div>
+        <h3>Приём платежей</h3>
+        <p>Принимайте оплату картами, переводами с передачей чеков по 54‑ФЗ</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">🏷️</div>
+        <h3>Скидки и бонусы</h3>
+        <p>Бонусная программа и разные типы скидок для повышения лояльности</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="integrations">
+  <div class="container">
+    <h2 class="section-title">Более 200 интеграций с сервисами онлайн-торговли</h2>
+    <p class="section-sub">Подключите учёт, доставку, оплату и маркетинг за пару кликов</p>
+    <div class="integration-logos">
+      <div>CRM</div>
+      <div>1С</div>
+      <div>МойСклад</div>
+      <div>Почта</div>
+      <div>СДЭК</div>
+      <div>Boxberry</div>
+      <div>ЮKassa</div>
+      <div>Сбер</div>
+      <div>Telegram</div>
+      <div>VK</div>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="container">
+    <div class="free-badge">Первые 7 дней бесплатно</div>
+    <h2>Создай интернет-магазин на ShopPlatform</h2>
+    <p>Попробуй все инструменты для запуска и масштабирования бизнеса</p>
+    <a href="#" class="btn-primary">Попробовать бесплатно</a>
+  </div>
+</section>
+
+<footer>
+  <p>
+    <a href="#">Публичная оферта</a>
+    <a href="#">Пользовательское соглашение</a>
+    <a href="#">Политика конфиденциальности</a>
+  </p>
+  <p style="margin-top: 16px;">&copy; 2026 ShopPlatform. Все права защищены.</p>
+</footer>
+
+</body>
+</html>
