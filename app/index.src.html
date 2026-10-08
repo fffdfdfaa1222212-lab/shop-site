@@ -37,14 +37,16 @@ h1{font:700 28px/1.1 var(--display);margin:0;text-wrap:balance}
 .track i:first-child{left:0}.track i:nth-child(2){right:0;border-color:var(--violet);box-shadow:0 0 10px var(--violet)}
 .track span{position:absolute;left:50%;top:-4px;transform:translateX(-50%);padding:0 8px;background:#0b1020;font:500 11px var(--display);letter-spacing:.14em;color:var(--mut)}
 label.f{display:grid;gap:6px;font:500 11px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
-input[type=date],select{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(6,9,18,.6);color:var(--fg);font:500 15px var(--body);color-scheme:dark}
+input[type=date],input[type=time],select{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(6,9,18,.6);color:var(--fg);font:500 15px var(--body);color-scheme:dark}
 input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .quick{display:flex;gap:8px}
 .chips{display:flex;gap:8px;flex-wrap:wrap}
 .chip{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:999px;border:1px solid var(--line);background:var(--glass);color:var(--fg);font:500 13px var(--body);cursor:pointer;transition:.2s}
-.chip svg{width:16px;height:16px}.chip:hover{border-color:var(--cyan)}
+.chip svg{width:16px;height:16px}.chip:hover{border-color:var(--cyan)}.chip:disabled{opacity:.35;cursor:not-allowed}.chip:disabled:hover{border-color:var(--line)}
 .chip.on{background:rgba(94,242,255,.16);border-color:var(--cyan);box-shadow:0 0 14px rgba(94,242,255,.25)}
 .chip.sm{padding:7px 12px}
+.range{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.slot small{color:var(--mut);font-variant-numeric:tabular-nums}.slot b{font:600 11px var(--display);color:var(--cyan);margin-left:2px}
 .list{display:grid;gap:12px;min-width:0}
 .count{font:500 12px var(--display);letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
 .card{--c:var(--cyan);padding:16px;position:relative;overflow:hidden;transition:border-color .2s,transform .2s}
@@ -110,6 +112,10 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
     </label>
     <div class="quick"><button class="chip sm" id="d0">Сегодня</button><button class="chip sm" id="d1">Завтра</button><button class="chip sm" id="d2">Послезавтра</button></div>
     <div><div class="note" style="margin-bottom:8px;letter-spacing:.16em;text-transform:uppercase">Транспорт</div><div class="chips" id="chips"></div></div>
+    <div><div class="note" style="margin-bottom:8px;letter-spacing:.16em;text-transform:uppercase">Время отправления</div>
+      <div class="chips" id="slots"></div>
+      <div class="range"><label class="f" for="tfrom">С<input type="time" id="tfrom"></label><label class="f" for="tto">До<input type="time" id="tto"></label></div>
+      <button class="chip sm" id="treset" hidden style="margin-top:8px">Сбросить время</button></div>
     <label class="f" for="sort">Сортировка
       <select id="sort"><option value="dep">Раннее отправление</option><option value="price">Сначала дешёвые</option><option value="dur">Сначала быстрые</option></select>
     </label>
@@ -144,7 +150,8 @@ const svg=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 const NAMES={bus:"Автобус",train:"Поезд",plane:"Самолёт",ride:"Попутчики"};
 const CITY={"nsk-brn":["Новосибирск","Барнаул"],"brn-nsk":["Барнаул","Новосибирск"]};
 const CODE={"Новосибирск":"НСК","Барнаул":"БРН"};
-let dir="nsk-brn",type="all",shown=[],cur,end=false;
+const SLOTS=[["night","Ночь","00:00–06:00",0,360],["morning","Утро","06:00–12:00",360,720],["day","День","12:00–18:00",720,1080],["evening","Вечер","18:00–24:00",1080,1440]];
+let dir="nsk-brn",type="all",shown=[],cur,end=false,slots=new Set();
 const $=id=>document.getElementById(id);
 const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
 const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return iso(d)};
@@ -158,7 +165,13 @@ function render(){
   const date=$("date").value,wd=new Date(date+"T12:00:00").getDay();
   ["d0","d1","d2"].forEach((id,i)=>$(id).classList.toggle("on",date===addDays(i)));
   $("chips").innerHTML=["all",...Object.keys(NAMES)].map(k=>`<button class="chip ${k===type?"on":""}" data-k="${k}">${k==="all"?"Все":svg(k)+NAMES[k]}</button>`).join("");
-  let r=TRIPS.filter(t=>t.dir===dir&&(type==="all"||t.type===type)&&(!t.days||t.days.includes(wd)));
+  const base=TRIPS.filter(t=>t.dir===dir&&(type==="all"||t.type===type)&&(!t.days||t.days.includes(wd)));
+  const f=$("tfrom").value?toMin($("tfrom").value):0,u=$("tto").value?toMin($("tto").value):1440;
+  $("slots").innerHTML=SLOTS.map(([k,n,rg,a,z])=>{const c=base.filter(t=>toMin(t.dep)>=a&&toMin(t.dep)<z).length;
+    return `<button class="chip slot ${slots.has(k)?"on":""}" data-s="${k}" ${c?"":"disabled"} title="${rg}">${n} <small>${rg.slice(0,5)}</small> <b>${c}</b></button>`}).join("");
+  $("treset").hidden=!(slots.size||$("tfrom").value||$("tto").value);
+  let r=base.filter(t=>{const m=toMin(t.dep);
+    return m>=f&&m<=u&&(!slots.size||SLOTS.some(([k,,,a,z])=>slots.has(k)&&m>=a&&m<z))});
   const minP=Math.min(...r.map(t=>t.price)),minD=Math.min(...r.map(t=>t.dur));
   const s=$("sort").value;r.sort((x,y)=>s==="price"?x.price-y.price:s==="dur"?x.dur-y.dur:toMin(x.dep)-toMin(y.dep));
   shown=r;
@@ -173,7 +186,7 @@ function render(){
         <span class="right"><span class="price">${t.price} ₽</span><div class="badges">${bd}</div></span></button>
       <div class="det"><div class="veh">${t.vehicle}</div><ol class="tl">${stops}</ol>
         <div class="acts"><a class="btn p" target="_blank" rel="noopener" href="${BUY[t.type](date,dir)}">Купить билет на ${date.split("-").reverse().join(".")}</a>
-        <button class="btn mapbtn" data-i="${i}">Как добраться до места посадки</button></div></div></article>`}).join("")||'<div class="empty glass">На эту дату рейсов нет. Выберите другой день или вид транспорта.</div>';
+        <button class="btn mapbtn" data-i="${i}">Как добраться до места посадки</button></div></div></article>`}).join("")||'<div class="empty glass">Нет рейсов по этим условиям. Расширьте время отправления, выберите другой день или вид транспорта.</div>';
 }
 function place(t,e){return PLACES[t.type][(dir==="nsk-brn")!==e?"nsk":"brn"]}
 function showPlace(e){
@@ -197,5 +210,8 @@ $("list").onclick=e=>{
 $("chips").onclick=e=>{const b=e.target.closest("[data-k]");if(b){type=b.dataset.k;render()}};
 $("swap").onclick=()=>{dir=dir==="nsk-brn"?"brn-nsk":"nsk-brn";$("swap").classList.toggle("spin");render()};
 ["d0","d1","d2"].forEach((id,i)=>$(id).onclick=()=>{$("date").value=addDays(i);render()});
+$("slots").onclick=e=>{const b=e.target.closest("[data-s]");if(b){slots.has(b.dataset.s)?slots.delete(b.dataset.s):slots.add(b.dataset.s);render()}};
+$("tfrom").onchange=$("tto").onchange=render;
+$("treset").onclick=()=>{slots.clear();$("tfrom").value=$("tto").value="";render()};
 $("date").onchange=render;$("sort").onchange=render;render();
 </script>
