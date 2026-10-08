@@ -9,7 +9,7 @@
 :root{
   --bg:#060912; --glass:rgba(255,255,255,.055); --glass-hi:rgba(255,255,255,.09); --line:rgba(160,190,255,.16);
   --fg:#e8eefc; --mut:#8a97b8; --cyan:#5ef2ff; --violet:#9b7bff; --amber:#ffb85e; --sky:#7db4ff;
-  --bus:var(--cyan); --train:var(--violet); --plane:var(--sky); --ride:var(--amber);
+  --bus:var(--cyan);--suburban:#ff7ab8; --train:var(--violet); --plane:var(--sky); --ride:var(--amber);
   --display:"Chakra Petch",ui-sans-serif,system-ui,sans-serif; --body:"Manrope",ui-sans-serif,system-ui,sans-serif;
   color-scheme:dark;
 }
@@ -80,7 +80,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .list{display:grid;gap:12px;min-width:0}
 .count{font:500 12px var(--display);letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
 .card{--c:var(--cyan);padding:16px;position:relative;overflow:hidden;transition:border-color .2s,transform .2s}
-.card[data-t=train]{--c:var(--train)}.card[data-t=plane]{--c:var(--plane)}.card[data-t=ride]{--c:var(--ride)}
+.card[data-t=train]{--c:var(--train)}.card[data-t=suburban]{--c:var(--suburban)}.card[data-t=plane]{--c:var(--plane)}.card[data-t=ride]{--c:var(--ride)}
 .card::after{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--c);box-shadow:0 0 16px var(--c)}
 .card:hover{border-color:color-mix(in srgb,var(--c) 60%,transparent)}
 .top{display:flex;gap:12px;align-items:center;justify-content:space-between;cursor:pointer;width:100%;background:none;border:0;color:inherit;font:inherit;text-align:left;padding:0}
@@ -107,6 +107,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:13px 16px;border-radius:12px;font:600 14px var(--body);text-decoration:none;cursor:pointer;border:1px solid var(--line);background:var(--glass-hi);color:var(--fg)}
 .btn.p{border:0;color:#04101a;background:linear-gradient(100deg,var(--cyan),var(--violet));box-shadow:0 8px 24px -8px rgba(94,242,255,.55)}
 .btn.p:hover{filter:brightness(1.1)}.btn:not(.p):hover{border-color:var(--cyan)}
+.mode{margin-left:8px;padding:2px 8px;border-radius:6px;font:500 11px var(--body);letter-spacing:.04em;text-transform:none}.mode.live{color:var(--cyan);background:rgba(94,242,255,.12)}.mode.demo{color:var(--amber);background:rgba(255,184,94,.12)}
 .empty{padding:28px;text-align:center;color:var(--mut)}
 .note{font-size:12px;color:var(--mut);max-width:70ch}
 #modal{position:fixed;inset:0;background:rgba(2,4,10,.7);backdrop-filter:blur(4px);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
@@ -163,7 +164,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
     <label class="f" for="sort">Сортировка
       <select id="sort"><option value="dep">Раннее отправление</option><option value="price">Сначала дешёвые</option><option value="dur">Сначала быстрые</option></select>
     </label>
-    <p class="note">Прототип. Время и цены примерные. Оплата проходит на сайте продавца: кнопка откроет страницу этого направления на выбранную дату, дальше выберите рейс и места.</p>
+    <p class="note">Если сверху «Демо-данные», рейсы примерные. Живое расписание работает через server.py. Оплата проходит на сайте продавца: кнопка откроет страницу этого направления на выбранную дату, дальше выберите рейс и места.</p>
   </aside>
   <main>
     <div class="count" id="count" style="margin-bottom:12px"></div>
@@ -194,6 +195,11 @@ window.TRIPS = [
   {type:"train",dir:"nsk-brn",dep:"22:40",price:1900,dur:315,carrier:"РЖД",vehicle:"Ночной поезд, купе",days:[1,3,5,0]},
   {type:"train",dir:"brn-nsk",dep:"08:20",price:1450,dur:330,carrier:"РЖД",vehicle:"Фирменный поезд, плацкарт/купе"},
   {type:"train",dir:"brn-nsk",dep:"23:05",price:1900,dur:315,carrier:"РЖД",vehicle:"Ночной поезд, купе",days:[2,4,6,0]},
+  // Электрички (ПРИМЕРНЫЕ времена)
+  {type:"suburban",dir:"nsk-brn",dep:"06:05",price:520,dur:420,carrier:"Пригородная компания (пример)",vehicle:"Электричка"},
+  {type:"suburban",dir:"nsk-brn",dep:"16:30",price:520,dur:430,carrier:"Пригородная компания (пример)",vehicle:"Электричка"},
+  {type:"suburban",dir:"brn-nsk",dep:"05:50",price:520,dur:420,carrier:"Пригородная компания (пример)",vehicle:"Электричка"},
+  {type:"suburban",dir:"brn-nsk",dep:"17:10",price:520,dur:430,carrier:"Пригородная компания (пример)",vehicle:"Электричка"},
   // Самолёт
   {type:"plane",dir:"nsk-brn",dep:"09:15",price:4200,dur:65,carrier:"Авиакомпания (уточнить)",vehicle:"Региональный самолёт",days:[2,4,6]},
   {type:"plane",dir:"brn-nsk",dep:"11:30",price:4200,dur:65,carrier:"Авиакомпания (уточнить)",vehicle:"Региональный самолёт",days:[2,4,6]},
@@ -201,7 +207,9 @@ window.TRIPS = [
   ...[["07:00",700],["10:00",650],["14:00",700],["18:00",750]].flatMap(([t,p])=>["nsk-brn","brn-nsk"].map(dir=>({type:"ride",dir,dep:t,price:p,dur:210,carrier:"Попутчик (BlaBlaCar)",vehicle:"Легковой автомобиль, 3 места"})))
 ];
 
-window.STOPS = { // остановки: [название, минуты от отправления в долях от длительности 0..1]
+window.STOPS = {
+  suburban:{ "nsk-brn":[["Новосибирск-Главный",0],["Обь",0.1],["Алтайская",0.85],["Барнаул",1]],
+             "brn-nsk":[["Барнаул",0],["Алтайская",0.15],["Обь",0.9],["Новосибирск-Главный",1]] }, // остановки: [название, минуты от отправления в долях от длительности 0..1]
   bus:{ "nsk-brn":[["Новосибирск, автовокзал «Главный»",0],["Бердск",0.18],["Искитим",0.35],["Барнаул, автовокзал",1]],
         "brn-nsk":[["Барнаул, автовокзал",0],["Искитим",0.65],["Бердск",0.82],["Новосибирск, автовокзал «Главный»",1]] },
   train:{ "nsk-brn":[["Новосибирск-Главный",0],["Обь",0.1],["Алтайская",0.8],["Барнаул",1]],
@@ -219,12 +227,14 @@ window.STOPS = { // остановки: [название, минуты от о�
 window.BUY = {
   bus:  (d,dir)=>dir==="nsk-brn"?`https://rasp.yandex.ru/bus/novosibirsk-glavnyi--barnaul?when=${d}`:`https://rasp.yandex.ru/all-transport/barnaul--novosibirsk?when=${d}`,
   train:(d,dir)=>`https://rasp.yandex.ru/train/${dir==="nsk-brn"?"novosibirsk--barnaul":"barnaul--novosibirsk"}?when=${d}`,
+  suburban:(d,dir)=>`https://rasp.yandex.ru/suburban/${dir==="nsk-brn"?"novosibirsk--barnaul":"barnaul--novosibirsk"}?when=${d}`,
   plane:(d,dir)=>`https://rasp.yandex.ru/plane/${dir==="nsk-brn"?"novosibirsk--barnaul":"barnaul--novosibirsk"}?when=${d}`,
   ride: (d,dir)=>`https://www.blablacar.ru/search?fn=${dir==="nsk-brn"?"Новосибирск":"Барнаул"}&tn=${dir==="nsk-brn"?"Барнаул":"Новосибирск"}&db=${d}`
 };
 
 // Места посадки/высадки: координаты ПРИБЛИЗИТЕЛЬНЫЕ (для метки на карте), поиск маршрута идёт по названию.
 window.PLACES = {
+  get suburban(){return this.train},
   bus:  {nsk:{name:"Автовокзал «Новосибирск-Главный»",addr:"Красный проспект, 4 (адрес по справочнику, сверьте на карте)",how:["Рядом с ж/д вокзалом Новосибирск-Главный.", "До аэропорта Толмачёво: автобус 111Э, в пути около часа."],q:"Автовокзал Новосибирск-Главный",ll:[55.0415,82.9080]},
          brn:{name:"Автовокзал Барнаул",addr:"проспект Ленина, 261 (сверьте на карте)",how:["Номера городских маршрутов до автовокзала проверьте в навигаторе (режим «Общественный транспорт»).", "До аэропорта: автобус 110 (идёт от авто- и ж/д вокзала)."],q:"Автовокзал Барнаул",ll:[53.3405,83.7745]}},
   train:{nsk:{name:"Вокзал Новосибирск-Главный",addr:"ул. Дмитрия Шамшурина, 43",how:["До аэропорта Толмачёво: автобус 111Э (40–50 мин), маршрутка 312 или электричка до станции Обь + бесплатный трансфер."],q:"Железнодорожный вокзал Новосибирск-Главный",ll:[55.0410,82.9053]},
@@ -241,13 +251,14 @@ const ICON={
  bus:'<path d="M5 17V6a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v11M5 17h14M5 11h14M7 20v-3M17 20v-3"/>',
  train:'<rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 11h14M9 21l2-4M15 21l-2-4"/>',
  plane:'<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+ suburban:'<rect x="6" y="4" width="12" height="12" rx="3"/><path d="M6 10h12M9 20l1.5-4M15 20l-1.5-4M10 4 9 1M14 4l1-3"/>',
  ride:'<path d="M5 16l1.5-5a2 2 0 0 1 2-1.5h7a2 2 0 0 1 2 1.5L19 16M4 16h16v3H4zM7 19v2M17 19v2"/>'};
 const svg=k=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICON[k]}</svg>`;
-const NAMES={bus:"Автобус",train:"Поезд",plane:"Самолёт",ride:"Попутчики"};
+const NAMES={bus:"Автобус",train:"Поезд",suburban:"Электричка",plane:"Самолёт",ride:"Попутчики"};
 const CITY={"nsk-brn":["Новосибирск","Барнаул"],"brn-nsk":["Барнаул","Новосибирск"]};
 const CODE={"Новосибирск":"НСК","Барнаул":"БРН"};
 const SLOTS=[["night","Ночь","00:00–06:00",0,360],["morning","Утро","06:00–12:00",360,720],["day","День","12:00–18:00",720,1080],["evening","Вечер","18:00–24:00",1080,1440]];
-let dir="nsk-brn",type="all",shown=[],cur,end=false,slots=new Set();
+let dir="nsk-brn",type="all",shown=[],cur,end=false,slots=new Set(),DATA=[],mode="demo",modeNote="",loading=false,reqId=0;
 const $=id=>document.getElementById(id);
 const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
 const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return iso(d)};
@@ -259,10 +270,9 @@ function render(){
   const[a,b]=CITY[dir];
   $("from").innerHTML=`<small>${CODE[a]} · откуда</small>${a}`;$("to").innerHTML=`<small>${CODE[b]} · куда</small>${b}`;
   const date=$("date").value;$("dtext").textContent=new Date(date+"T12:00:00").toLocaleDateString("ru-RU",{weekday:"short",day:"numeric",month:"long",year:"numeric"}).replace(" г.","");
-  const wd=new Date(date+"T12:00:00").getDay();
   ["d0","d1","d2"].forEach((id,i)=>$(id).classList.toggle("on",date===addDays(i)));
-  $("chips").innerHTML=["all",...Object.keys(NAMES)].map(k=>`<button class="chip ${k===type?"on":""}" data-k="${k}">${k==="all"?"Все":svg(k)+NAMES[k]}</button>`).join("");
-  const base=TRIPS.filter(t=>t.dir===dir&&(type==="all"||t.type===type)&&(!t.days||t.days.includes(wd)));
+  $("chips").innerHTML=["all",...Object.keys(NAMES).filter(k=>mode==="demo"||k!=="ride")].map(k=>`<button class="chip ${k===type?"on":""}" data-k="${k}">${k==="all"?"Все":svg(k)+NAMES[k]}</button>`).join("");
+  const base=DATA.filter(t=>type==="all"||t.type===type);
   const f=$("tfrom").value?toMin($("tfrom").value):0,u=$("tto").value?toMin($("tto").value):1440;
   $("slots").innerHTML=SLOTS.map(([k,n,rg,a,z])=>{const c=base.filter(t=>toMin(t.dep)>=a&&toMin(t.dep)<z).length;
     return `<button class="chip slot ${slots.has(k)?"on":""}" data-s="${k}" ${c?"":"disabled"} title="${rg}">${n} <small>${rg.slice(0,5)}</small> <b>${c}</b></button>`}).join("");
@@ -270,18 +280,18 @@ function render(){
   $("treset").hidden=!(slots.size||$("tfrom").value||$("tto").value);
   let r=base.filter(t=>{const m=toMin(t.dep);
     return m>=f&&m<=u&&(!slots.size||SLOTS.some(([k,,,a,z])=>slots.has(k)&&m>=a&&m<z))});
-  const minP=Math.min(...r.map(t=>t.price)),minD=Math.min(...r.map(t=>t.dur));
-  const s=$("sort").value;r.sort((x,y)=>s==="price"?x.price-y.price:s==="dur"?x.dur-y.dur:toMin(x.dep)-toMin(y.dep));
+  const priced=r.filter(t=>t.price!=null),minP=priced.length?Math.min(...priced.map(t=>t.price)):null,minD=r.length?Math.min(...r.map(t=>t.dur)):null;
+  const s=$("sort").value;r.sort((x,y)=>s==="price"?(x.price??1e9)-(y.price??1e9):s==="dur"?x.dur-y.dur:toMin(x.dep)-toMin(y.dep));
   shown=r;
-  $("count").textContent=r.length?`Найдено рейсов: ${r.length}`:"";
+  $("count").innerHTML=(loading?"Загружаю расписание…":r.length?`Найдено рейсов: ${r.length}`:"")+(modeNote?` <span class="mode ${mode}">${modeNote}</span>`:"");
   $("list").innerHTML=r.map((t,i)=>{
     const d0=toMin(t.dep),arr=d0+t.dur,next=arr>=1440?"+1 день":"";
-    const stops=STOPS[t.type][dir].map(([n,f])=>`<li><time>${fmt(d0+Math.round(t.dur*f))}</time><b></b><span>${n}</span></li>`).join("");
-    const bd=(t.price===minP?'<span class="badge">Дешевле</span>':"")+(t.dur===minD?'<span class="badge">Быстрее</span>':"");
-    return `<article class="card glass" data-t="${t.type}" style="animation-delay:${Math.min(i,10)*30}ms">
+    const stops=t.uid?'<li class="ld"><time></time><b></b><span>Загружаю маршрут…</span></li>':STOPS[t.type][dir].map(([n,f])=>`<li><time>${fmt(d0+Math.round(t.dur*f))}</time><b></b><span>${n}</span></li>`).join("");
+    const bd=(t.price!=null&&t.price===minP?'<span class="badge">Дешевле</span>':"")+(t.dur===minD?'<span class="badge">Быстрее</span>':"");
+    return `<article class="card glass" data-i="${i}" data-t="${t.type}" style="animation-delay:${Math.min(i,10)*30}ms">
       <button class="top" aria-expanded="false"><span class="ic">${svg(t.type)}</span>
         <span class="main"><span class="time">${t.dep} → ${fmt(arr)}${next?`<em>${next}</em>`:""}</span><div class="sub">${NAMES[t.type]} · ${dur(t.dur)} · ${t.carrier}</div></span>
-        <span class="right"><span class="price">${t.price} ₽</span><div class="badges">${bd}</div></span></button>
+        <span class="right"><span class="price">${t.price!=null?t.price+" ₽":"цена на сайте"}</span><div class="badges">${bd}</div></span></button>
       <div class="det"><div class="veh">${t.vehicle}</div><ol class="tl">${stops}</ol>
         <div class="acts"><a class="btn p" target="_blank" rel="noopener" href="${BUY[t.type](date,dir)}">Перейти к билетам на ${date.split("-").reverse().join(".")}</a>
         <button class="btn mapbtn" data-i="${i}">Как добраться до места посадки</button></div></div></article>`}).join("")||'<div class="empty glass">Нет рейсов по этим условиям. Расширьте время отправления, выберите другой день или вид транспорта.</div>';
@@ -303,11 +313,17 @@ $("close").onclick=closeM;$("modal").onclick=e=>{if(e.target.id==="modal")closeM
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeM()});
 $("list").onclick=e=>{
   const mb=e.target.closest(".mapbtn");if(mb){cur=shown[+mb.dataset.i];$("modal").classList.add("on");showPlace(false);return}
-  const top=e.target.closest(".top");if(top){const c=top.parentElement;c.classList.toggle("open");top.setAttribute("aria-expanded",c.classList.contains("open"))}
+  const top=e.target.closest(".top");if(top){const c=top.parentElement;c.classList.toggle("open");top.setAttribute("aria-expanded",c.classList.contains("open"));if(c.classList.contains("open"))loadStops(c)}
 };
+async function loadStops(c){
+  const t=shown[+c.dataset.i],ol=c.querySelector(".tl");if(!t||!t.uid||c.dataset.loaded)return;c.dataset.loaded="1";
+  try{const r=await fetch(`/api/stops?uid=${encodeURIComponent(t.uid)}&date=${t.date}`);if(!r.ok)throw 0;const{stops}=await r.json();
+    ol.innerHTML=stops.map(s=>`<li><time>${s.t||""}</time><b></b><span>${s.name}</span></li>`).join("")||`<li><span>${t.from} → ${t.to}</span></li>`}
+  catch(_){c.dataset.loaded="";ol.innerHTML=`<li><time>${t.dep}</time><b></b><span>${t.from||""}</span></li><li><time>${t.arr||""}</time><b></b><span>${t.to||""}</span></li>`}
+}
 $("chips").onclick=e=>{const b=e.target.closest("[data-k]");if(b){type=b.dataset.k;render()}};
-$("swap").onclick=()=>{dir=dir==="nsk-brn"?"brn-nsk":"nsk-brn";$("swap").classList.toggle("spin");render()};
-["d0","d1","d2"].forEach((id,i)=>$(id).onclick=()=>{$("date").value=addDays(i);render()});
+$("swap").onclick=()=>{dir=dir==="nsk-brn"?"brn-nsk":"nsk-brn";$("swap").classList.toggle("spin");refresh()};
+["d0","d1","d2"].forEach((id,i)=>$(id).onclick=()=>{$("date").value=addDays(i);refresh()});
 $("slots").onclick=e=>{const b=e.target.closest("[data-s]");if(b){slots.has(b.dataset.s)?slots.delete(b.dataset.s):slots.add(b.dataset.s);render()}};
 let tpT=null;
 function drawTp(){
@@ -346,10 +362,22 @@ function openCal(o){
 $("datebtn").onclick=()=>openCal($("cal").hidden);
 $("cprev").onclick=()=>{cm--;if(cm<0){cm=11;cy--}drawCal()};
 $("cnext").onclick=()=>{cm++;if(cm>11){cm=0;cy++}drawCal()};
-$("cgrid").onclick=e=>{const b=e.target.closest("[data-d]");if(b&&!b.disabled){$("date").value=b.dataset.d;openCal(false);render();$("datebtn").focus()}};
+$("cgrid").onclick=e=>{const b=e.target.closest("[data-d]");if(b&&!b.disabled){$("date").value=b.dataset.d;openCal(false);refresh();$("datebtn").focus()}};
 document.addEventListener("click",e=>{if(!$("cal").hidden&&!e.target.closest(".dp"))openCal(false)});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("cal").hidden){openCal(false);$("datebtn").focus()}});
-$("sort").onchange=render;render();
+const demoFor=()=>{const wd=new Date($("date").value+"T12:00:00").getDay();return TRIPS.filter(t=>t.dir===dir&&(!t.days||t.days.includes(wd)))};
+async function refresh(){
+  const id=++reqId,date=$("date").value;loading=true;render();
+  let note="";
+  if(location.protocol.startsWith("http")){
+    try{const r=await fetch(`/api/trips?dir=${dir}&date=${date}`);const j=await r.json();
+      if(r.ok){if(id!==reqId)return;DATA=j.trips;mode="live";modeNote="Живое расписание · Яндекс.Расписания";loading=false;return render()}
+      note=j.error==="no_key"?"Демо-данные: на сервере нет ключа API":"Демо-данные: сервис расписаний не отвечает"}
+    catch(_){note="Демо-данные: сервер приложения недоступен"}
+  }else note="Демо-данные: запустите server.py для живого расписания";
+  if(id!==reqId)return;DATA=demoFor();mode="demo";modeNote=note;loading=false;render();
+}
+$("sort").onchange=render;refresh();
 </script>
 
 </body></html>
