@@ -28,11 +28,14 @@ window.STOPS = { // остановки: [название, минуты от о�
          "brn-nsk":[["Барнаул (точка встречи с водителем)",0],["Новосибирск (точка высадки)",1]] }
 };
 
-// Ссылки на покупку с подстановкой даты (YYYY-MM-DD). Формат ссылок нужно проверить вручную.
+// Ссылки на продавцов: страница направления на выбранную дату (YYYY-MM-DD).
+// Прямой ссылки на оплату конкретного рейса нет: выбор рейса, мест и оплата идут уже на сайте продавца.
+// Подтверждены поиском: rasp.yandex.ru/bus/novosibirsk-glavnyi--barnaul и /all-transport/novosibirsk--barnaul.
+// Не проверены: обратное направление, /train/, /plane/ и поиск BlaBlaCar. Проверьте вручную.
 window.BUY = {
-  bus:  (d,dir)=>`https://rasp.yandex.ru/search/bus/?fromName=${dir==="nsk-brn"?"Новосибирск":"Барнаул"}&toName=${dir==="nsk-brn"?"Барнаул":"Новосибирск"}&when=${d}`,
-  train:(d,dir)=>`https://rasp.yandex.ru/search/train/?fromName=${dir==="nsk-brn"?"Новосибирск":"Барнаул"}&toName=${dir==="nsk-brn"?"Барнаул":"Новосибирск"}&when=${d}`,
-  plane:(d,dir)=>`https://rasp.yandex.ru/search/plane/?fromName=${dir==="nsk-brn"?"Новосибирск":"Барнаул"}&toName=${dir==="nsk-brn"?"Барнаул":"Новосибирск"}&when=${d}`,
+  bus:  (d,dir)=>dir==="nsk-brn"?`https://rasp.yandex.ru/bus/novosibirsk-glavnyi--barnaul?when=${d}`:`https://rasp.yandex.ru/all-transport/barnaul--novosibirsk?when=${d}`,
+  train:(d,dir)=>`https://rasp.yandex.ru/train/${dir==="nsk-brn"?"novosibirsk--barnaul":"barnaul--novosibirsk"}?when=${d}`,
+  plane:(d,dir)=>`https://rasp.yandex.ru/plane/${dir==="nsk-brn"?"novosibirsk--barnaul":"barnaul--novosibirsk"}?when=${d}`,
   ride: (d,dir)=>`https://www.blablacar.ru/search?fn=${dir==="nsk-brn"?"Новосибирск":"Барнаул"}&tn=${dir==="nsk-brn"?"Барнаул":"Новосибирск"}&db=${d}`
 };
 

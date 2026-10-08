@@ -66,7 +66,16 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .calg .d.we{color:var(--violet)}
 .calg .d.td{border-color:var(--mut)}
 .calg .d.sel{background:linear-gradient(135deg,var(--cyan),var(--violet));color:#04101a;border-color:transparent;box-shadow:0 0 16px rgba(94,242,255,.55)}
-.range{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.range{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;position:relative}
+.tpop .lbl{font:500 10px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--mut);margin:8px 0 6px}
+.hgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}.mgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.hgrid button,.mgrid button{padding:9px 0;border-radius:10px;border:1px solid transparent;background:none;color:var(--fg);font:600 14px var(--display);font-variant-numeric:tabular-nums;cursor:pointer}
+.hgrid button:hover,.mgrid button:hover:not(:disabled){border-color:var(--cyan);background:rgba(94,242,255,.1)}
+.hgrid button.sel,.mgrid button.sel{background:linear-gradient(135deg,var(--cyan),var(--violet));color:#04101a;box-shadow:0 0 14px rgba(94,242,255,.5)}
+.mgrid button:disabled{opacity:.3;cursor:not-allowed}
+#tptitle{text-transform:none}
+.tpact{display:flex;justify-content:space-between;margin-top:12px}
+.tpop[hidden]{display:none}
 .slot small{color:var(--mut);font-variant-numeric:tabular-nums}.slot b{font:600 11px var(--display);color:var(--cyan);margin-left:2px}
 .list{display:grid;gap:12px;min-width:0}
 .count{font:500 12px var(--display);letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
@@ -140,12 +149,21 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
     <div><div class="note" style="margin-bottom:8px;letter-spacing:.16em;text-transform:uppercase">Транспорт</div><div class="chips" id="chips"></div></div>
     <div><div class="note" style="margin-bottom:8px;letter-spacing:.16em;text-transform:uppercase">Время отправления</div>
       <div class="chips" id="slots"></div>
-      <div class="range"><label class="f" for="tfrom">С<input type="time" id="tfrom"></label><label class="f" for="tto">До<input type="time" id="tto"></label></div>
+      <div class="range" id="range">
+        <div class="f"><span>С</span><input type="hidden" id="tfrom"><button class="datebtn" data-tp="tfrom" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="tfromtxt">Любое</span></button></div>
+        <div class="f"><span>До</span><input type="hidden" id="tto"><button class="datebtn" data-tp="tto" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span id="ttotxt">Любое</span></button></div>
+        <div class="cal glass tpop" id="tpop" role="dialog" aria-label="Выбор времени" hidden>
+          <div class="calh"><b id="tptitle"></b><button class="calnav" id="tpclose" aria-label="Закрыть">✕</button></div>
+          <div class="lbl">Часы</div><div class="hgrid" id="hgrid"></div>
+          <div class="lbl">Минуты</div><div class="mgrid" id="mgrid"></div>
+          <div class="tpact"><button class="chip sm" id="tpany">Любое</button><button class="chip sm on" id="tpok">Готово</button></div>
+        </div>
+      </div>
       <button class="chip sm" id="treset" hidden style="margin-top:8px">Сбросить время</button></div>
     <label class="f" for="sort">Сортировка
       <select id="sort"><option value="dep">Раннее отправление</option><option value="price">Сначала дешёвые</option><option value="dur">Сначала быстрые</option></select>
     </label>
-    <p class="note">Прототип. Время и цены примерные. Актуальные рейсы и покупка билета: кнопка «Купить» откроет сайт продавца с выбранной датой.</p>
+    <p class="note">Прототип. Время и цены примерные. Оплата проходит на сайте продавца: кнопка откроет страницу этого направления на выбранную дату, дальше выберите рейс и места.</p>
   </aside>
   <main>
     <div class="count" id="count" style="margin-bottom:12px"></div>
@@ -194,11 +212,14 @@ window.STOPS = { // остановки: [название, минуты от о�
          "brn-nsk":[["Барнаул (точка встречи с водителем)",0],["Новосибирск (точка высадки)",1]] }
 };
 
-// Ссылки на покупку с подстановкой даты (YYYY-MM-DD). Формат ссылок нужно проверить вручную.
+// Ссылки на продавцов: страница направления на выбранную дату (YYYY-MM-DD).
+// Прямой ссылки на оплату конкретного рейса нет: выбор рейса, мест и оплата идут уже на сайте продавца.
+// Подтверждены поиском: rasp.yandex.ru/bus/novosibirsk-glavnyi--barnaul и /all-transport/novosibirsk--barnaul.
+// Не проверены: обратное направление, /train/, /plane/ и поиск BlaBlaCar. Проверьте вручную.
 window.BUY = {
-  bus:  (d,dir)=>`https://rasp.yandex.ru/search/bus/?fromName=${dir==="nsk-brn"?"Новосибирск":"Барнаул"}&toName=${dir==="nsk-brn"?"Барнаул":"Новосибирск"}&when=${d}`,
-  train:(d,dir)=>`https://rasp.yandex.ru/search/train/?fromName=${dir==="nsk-brn"?"Новосибирск":"Барнаул"}&toName=${dir==="nsk-brn"?"Барнаул":"Новосибирск"}&when=${d}`,
-  plane:(d,dir)=>`https://rasp.yandex.ru/search/plane/?fromName=${dir==="nsk-brn"?"Новосибирск":"Барнаул"}&toName=${dir==="nsk-brn"?"Барнаул":"Новосибирск"}&when=${d}`,
+  bus:  (d,dir)=>dir==="nsk-brn"?`https://rasp.yandex.ru/bus/novosibirsk-glavnyi--barnaul?when=${d}`:`https://rasp.yandex.ru/all-transport/barnaul--novosibirsk?when=${d}`,
+  train:(d,dir)=>`https://rasp.yandex.ru/train/${dir==="nsk-brn"?"novosibirsk--barnaul":"barnaul--novosibirsk"}?when=${d}`,
+  plane:(d,dir)=>`https://rasp.yandex.ru/plane/${dir==="nsk-brn"?"novosibirsk--barnaul":"barnaul--novosibirsk"}?when=${d}`,
   ride: (d,dir)=>`https://www.blablacar.ru/search?fn=${dir==="nsk-brn"?"Новосибирск":"Барнаул"}&tn=${dir==="nsk-brn"?"Барнаул":"Новосибирск"}&db=${d}`
 };
 
@@ -245,6 +266,7 @@ function render(){
   const f=$("tfrom").value?toMin($("tfrom").value):0,u=$("tto").value?toMin($("tto").value):1440;
   $("slots").innerHTML=SLOTS.map(([k,n,rg,a,z])=>{const c=base.filter(t=>toMin(t.dep)>=a&&toMin(t.dep)<z).length;
     return `<button class="chip slot ${slots.has(k)?"on":""}" data-s="${k}" ${c?"":"disabled"} title="${rg}">${n} <small>${rg.slice(0,5)}</small> <b>${c}</b></button>`}).join("");
+  $("tfromtxt").textContent=$("tfrom").value||"Любое";$("ttotxt").textContent=$("tto").value||"Любое";
   $("treset").hidden=!(slots.size||$("tfrom").value||$("tto").value);
   let r=base.filter(t=>{const m=toMin(t.dep);
     return m>=f&&m<=u&&(!slots.size||SLOTS.some(([k,,,a,z])=>slots.has(k)&&m>=a&&m<z))});
@@ -261,7 +283,7 @@ function render(){
         <span class="main"><span class="time">${t.dep} → ${fmt(arr)}${next?`<em>${next}</em>`:""}</span><div class="sub">${NAMES[t.type]} · ${dur(t.dur)} · ${t.carrier}</div></span>
         <span class="right"><span class="price">${t.price} ₽</span><div class="badges">${bd}</div></span></button>
       <div class="det"><div class="veh">${t.vehicle}</div><ol class="tl">${stops}</ol>
-        <div class="acts"><a class="btn p" target="_blank" rel="noopener" href="${BUY[t.type](date,dir)}">Купить билет на ${date.split("-").reverse().join(".")}</a>
+        <div class="acts"><a class="btn p" target="_blank" rel="noopener" href="${BUY[t.type](date,dir)}">Перейти к билетам на ${date.split("-").reverse().join(".")}</a>
         <button class="btn mapbtn" data-i="${i}">Как добраться до места посадки</button></div></div></article>`}).join("")||'<div class="empty glass">Нет рейсов по этим условиям. Расширьте время отправления, выберите другой день или вид транспорта.</div>';
 }
 function place(t,e){return PLACES[t.type][(dir==="nsk-brn")!==e?"nsk":"brn"]}
@@ -287,7 +309,21 @@ $("chips").onclick=e=>{const b=e.target.closest("[data-k]");if(b){type=b.dataset
 $("swap").onclick=()=>{dir=dir==="nsk-brn"?"brn-nsk":"nsk-brn";$("swap").classList.toggle("spin");render()};
 ["d0","d1","d2"].forEach((id,i)=>$(id).onclick=()=>{$("date").value=addDays(i);render()});
 $("slots").onclick=e=>{const b=e.target.closest("[data-s]");if(b){slots.has(b.dataset.s)?slots.delete(b.dataset.s):slots.add(b.dataset.s);render()}};
-$("tfrom").onchange=$("tto").onchange=render;
+let tpT=null;
+function drawTp(){
+  const v=$(tpT).value,hh=v?+v.slice(0,2):null,mm=v?+v.slice(3):null;
+  $("hgrid").innerHTML=Array.from({length:24},(_,i)=>`<button data-h="${i}" class="${i===hh?"sel":""}">${String(i).padStart(2,"0")}</button>`).join("");
+  $("mgrid").innerHTML=[0,15,30,45].map(m=>`<button data-m="${m}" ${v?"":"disabled"} class="${v&&m===mm?"sel":""}">${String(m).padStart(2,"0")}</button>`).join("");
+}
+function openTp(id){if(id){openCal(false);tpT=id;$("tptitle").textContent=id==="tfrom"?"Отправление с":"Отправление до";drawTp()}$("tpop").hidden=!id}
+const setT=(h,m)=>{$(tpT).value=String(h).padStart(2,"0")+":"+String(m).padStart(2,"0");drawTp();render()};
+document.querySelectorAll("[data-tp]").forEach(b=>b.onclick=()=>{$("tpop").hidden||tpT!==b.dataset.tp?openTp(b.dataset.tp):openTp(null)});
+$("hgrid").onclick=e=>{const b=e.target.closest("[data-h]");if(b){const v=$(tpT).value;setT(+b.dataset.h,v?+v.slice(3):0)}};
+$("mgrid").onclick=e=>{const b=e.target.closest("[data-m]");if(b&&!b.disabled){setT(+$(tpT).value.slice(0,2),+b.dataset.m);openTp(null)}};
+$("tpany").onclick=()=>{$(tpT).value="";openTp(null);render()};
+$("tpok").onclick=$("tpclose").onclick=()=>openTp(null);
+document.addEventListener("click",e=>{if(!$("tpop").hidden&&!e.composedPath().includes($("range")))openTp(null)});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("tpop").hidden)openTp(null)});
 $("treset").onclick=()=>{slots.clear();$("tfrom").value=$("tto").value="";render()};
 const MONTHS=["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
 let cy,cm;
@@ -303,6 +339,7 @@ function drawCal(){
   $("cgrid").innerHTML=g;
 }
 function openCal(o){
+  if(o)$("tpop").hidden=true;
   $("cal").hidden=!o;$("datebtn").setAttribute("aria-expanded",o);
   if(o){const d=new Date($("date").value+"T12:00:00");cy=d.getFullYear();cm=d.getMonth();drawCal()}
 }
