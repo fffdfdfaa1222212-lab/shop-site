@@ -36,7 +36,7 @@ h1{font:700 28px/1.1 var(--display);margin:0;text-wrap:balance}
 .track i{position:absolute;top:2px;width:10px;height:10px;border-radius:50%;background:var(--bg);border:2px solid var(--cyan);box-shadow:0 0 10px var(--cyan)}
 .track i:first-child{left:0}.track i:nth-child(2){right:0;border-color:var(--violet);box-shadow:0 0 10px var(--violet)}
 .track span{position:absolute;left:50%;top:-4px;transform:translateX(-50%);padding:0 8px;background:#0b1020;font:500 11px var(--display);letter-spacing:.14em;color:var(--mut)}
-label.f{display:grid;gap:6px;font:500 11px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
+.f{display:grid;gap:6px;font:500 11px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--mut)}
 input[type=date],input[type=time],select{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(6,9,18,.6);color:var(--fg);font:500 15px var(--body);color-scheme:dark}
 input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 .quick{display:flex;gap:8px}
@@ -44,7 +44,26 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .chip{display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:999px;border:1px solid var(--line);background:var(--glass);color:var(--fg);font:500 13px var(--body);cursor:pointer;transition:.2s}
 .chip svg{width:16px;height:16px}.chip:hover{border-color:var(--cyan)}.chip:disabled{opacity:.35;cursor:not-allowed}.chip:disabled:hover{border-color:var(--line)}
 .chip.on{background:rgba(94,242,255,.16);border-color:var(--cyan);box-shadow:0 0 14px rgba(94,242,255,.25)}
-.chip.sm{padding:7px 12px}
+.chip.sm{padding:7px 12px}.chip[hidden]{display:none}
+.panel{z-index:5}
+.dp{position:relative}
+.datebtn{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:rgba(6,9,18,.6);color:var(--fg);font:600 15px var(--body);cursor:pointer;text-align:left;text-transform:none;letter-spacing:0;transition:.2s}
+.datebtn:hover,.datebtn[aria-expanded=true]{border-color:var(--cyan);box-shadow:0 0 14px rgba(94,242,255,.2)}
+.datebtn svg{width:20px;height:20px;color:var(--cyan);flex:none}.datebtn span{flex:1;min-width:0}
+.chev{width:8px;height:8px;border-right:2px solid var(--mut);border-bottom:2px solid var(--mut);transform:rotate(45deg) translateY(-2px);flex:none}
+.cal{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 8px);padding:14px;background:#0b1020;box-shadow:0 24px 60px -16px rgba(0,0,0,.8),0 0 30px -10px rgba(94,242,255,.35)}
+.calh{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.calh b{font:600 15px var(--display);letter-spacing:.06em;text-transform:capitalize}
+.calnav{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--glass);color:var(--fg);font-size:20px;line-height:1;cursor:pointer}
+.calnav:hover:not(:disabled){border-color:var(--cyan);color:var(--cyan)}.calnav:disabled{opacity:.3;cursor:not-allowed}
+.calg{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.calg .wd{font:500 10px var(--display);letter-spacing:.12em;text-align:center;color:var(--mut);padding:4px 0;text-transform:uppercase}
+.calg .d{aspect-ratio:1;border-radius:10px;border:1px solid transparent;background:none;color:var(--fg);font:600 14px var(--display);font-variant-numeric:tabular-nums;cursor:pointer;padding:0}
+.calg .d:hover:not(:disabled){border-color:var(--cyan);background:rgba(94,242,255,.1)}
+.calg .d:disabled{color:var(--mut);opacity:.3;cursor:not-allowed}
+.calg .d.we{color:var(--violet)}
+.calg .d.td{border-color:var(--mut)}
+.calg .d.sel{background:linear-gradient(135deg,var(--cyan),var(--violet));color:#04101a;border-color:transparent;box-shadow:0 0 16px rgba(94,242,255,.55)}
 .range{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
 .slot small{color:var(--mut);font-variant-numeric:tabular-nums}.slot b{font:600 11px var(--display);color:var(--cyan);margin-left:2px}
 .list{display:grid;gap:12px;min-width:0}
@@ -107,9 +126,14 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
       <div class="city" id="to"></div>
       <div class="track"><i></i><i></i><span>~230 КМ</span></div>
     </div>
-    <label class="f" for="date">Дата поездки
-      <input type="date" id="date">
-    </label>
+    <div class="f dp"><span id="dlabel">Дата поездки</span>
+      <input type="hidden" id="date">
+      <button class="datebtn" id="datebtn" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="dlabel dtext"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span id="dtext"></span><i class="chev"></i></button>
+      <div class="cal glass" id="cal" role="dialog" aria-label="Календарь" hidden>
+        <div class="calh"><button class="calnav" id="cprev" aria-label="Предыдущий месяц">‹</button><b id="ctitle"></b><button class="calnav" id="cnext" aria-label="Следующий месяц">›</button></div>
+        <div class="calg" id="cgrid"></div>
+      </div>
+    </div>
     <div class="quick"><button class="chip sm" id="d0">Сегодня</button><button class="chip sm" id="d1">Завтра</button><button class="chip sm" id="d2">Послезавтра</button></div>
     <div><div class="note" style="margin-bottom:8px;letter-spacing:.16em;text-transform:uppercase">Транспорт</div><div class="chips" id="chips"></div></div>
     <div><div class="note" style="margin-bottom:8px;letter-spacing:.16em;text-transform:uppercase">Время отправления</div>
@@ -155,14 +179,15 @@ let dir="nsk-brn",type="all",shown=[],cur,end=false,slots=new Set();
 const $=id=>document.getElementById(id);
 const iso=d=>new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10);
 const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return iso(d)};
-$("date").value=addDays(0);$("date").min=addDays(0);
+$("date").value=addDays(0);
 const toMin=t=>{const[a,b]=t.split(":");return+a*60+ +b};
 const fmt=m=>{m=(m%1440+1440)%1440;return String(m/60|0).padStart(2,"0")+":"+String(m%60).padStart(2,"0")};
 const dur=m=>(m/60|0)+" ч"+(m%60?" "+m%60+" мин":"");
 function render(){
   const[a,b]=CITY[dir];
   $("from").innerHTML=`<small>${CODE[a]} · откуда</small>${a}`;$("to").innerHTML=`<small>${CODE[b]} · куда</small>${b}`;
-  const date=$("date").value,wd=new Date(date+"T12:00:00").getDay();
+  const date=$("date").value;$("dtext").textContent=new Date(date+"T12:00:00").toLocaleDateString("ru-RU",{weekday:"short",day:"numeric",month:"long",year:"numeric"}).replace(" г.","");
+  const wd=new Date(date+"T12:00:00").getDay();
   ["d0","d1","d2"].forEach((id,i)=>$(id).classList.toggle("on",date===addDays(i)));
   $("chips").innerHTML=["all",...Object.keys(NAMES)].map(k=>`<button class="chip ${k===type?"on":""}" data-k="${k}">${k==="all"?"Все":svg(k)+NAMES[k]}</button>`).join("");
   const base=TRIPS.filter(t=>t.dir===dir&&(type==="all"||t.type===type)&&(!t.days||t.days.includes(wd)));
@@ -213,5 +238,28 @@ $("swap").onclick=()=>{dir=dir==="nsk-brn"?"brn-nsk":"nsk-brn";$("swap").classLi
 $("slots").onclick=e=>{const b=e.target.closest("[data-s]");if(b){slots.has(b.dataset.s)?slots.delete(b.dataset.s):slots.add(b.dataset.s);render()}};
 $("tfrom").onchange=$("tto").onchange=render;
 $("treset").onclick=()=>{slots.clear();$("tfrom").value=$("tto").value="";render()};
-$("date").onchange=render;$("sort").onchange=render;render();
+const MONTHS=["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
+let cy,cm;
+function drawCal(){
+  const sel=$("date").value,t0=addDays(0),now=new Date();
+  $("ctitle").textContent=MONTHS[cm]+" "+cy;
+  $("cprev").disabled=cy===now.getFullYear()&&cm===now.getMonth();
+  const first=(new Date(cy,cm,1).getDay()+6)%7,n=new Date(cy,cm+1,0).getDate();
+  let g=["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].map(d=>`<div class="wd">${d}</div>`).join("")+"<span></span>".repeat(first);
+  for(let d=1;d<=n;d++){
+    const id=`${cy}-${String(cm+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`,col=(first+d-1)%7;
+    g+=`<button class="d${col>4?" we":""}${id===t0?" td":""}${id===sel?" sel":""}" data-d="${id}" ${id<t0?"disabled":""} aria-label="${d} ${MONTHS[cm]} ${cy}" ${id===sel?'aria-current="date"':""}>${d}</button>`}
+  $("cgrid").innerHTML=g;
+}
+function openCal(o){
+  $("cal").hidden=!o;$("datebtn").setAttribute("aria-expanded",o);
+  if(o){const d=new Date($("date").value+"T12:00:00");cy=d.getFullYear();cm=d.getMonth();drawCal()}
+}
+$("datebtn").onclick=()=>openCal($("cal").hidden);
+$("cprev").onclick=()=>{cm--;if(cm<0){cm=11;cy--}drawCal()};
+$("cnext").onclick=()=>{cm++;if(cm>11){cm=0;cy++}drawCal()};
+$("cgrid").onclick=e=>{const b=e.target.closest("[data-d]");if(b&&!b.disabled){$("date").value=b.dataset.d;openCal(false);render();$("datebtn").focus()}};
+document.addEventListener("click",e=>{if(!$("cal").hidden&&!e.target.closest(".dp"))openCal(false)});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("cal").hidden){openCal(false);$("datebtn").focus()}});
+$("sort").onchange=render;render();
 </script>
