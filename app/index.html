@@ -3,6 +3,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Новосибирск ⇄ Барнаул</title>
 <link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0f172a">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 :root{--bg:#0f172a;--card:#1e293b;--tx:#e2e8f0;--mut:#94a3b8;--ac:#38bdf8;--ok:#22c55e}
 @media(prefers-color-scheme:light){:root{--bg:#f1f5f9;--card:#fff;--tx:#0f172a;--mut:#64748b;--ac:#0284c7}}
@@ -23,6 +24,12 @@ input[type=date],select{width:100%;margin-top:10px;padding:12px;border-radius:12
 .stop{display:flex;gap:10px;padding:4px 0}.stop i{width:10px;height:10px;border-radius:50%;background:var(--ac);margin-top:6px;flex:none}
 .stop span:first-of-type{width:48px;font-weight:600;flex:none}
 .buy{display:block;text-align:center;background:var(--ac);color:#fff;text-decoration:none;padding:12px;border-radius:12px;margin-top:12px;font-weight:600}
+.mapbtn{display:block;width:100%;margin-top:8px;padding:12px;border-radius:12px;border:1px solid var(--ac);background:none;color:var(--ac);font-weight:600;cursor:pointer}
+#modal{position:fixed;inset:0;background:#000a;display:none;align-items:flex-end;justify-content:center;z-index:1000}
+#modal.on{display:flex}#sheet{background:var(--card);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:14px;max-height:92vh;overflow:auto}
+#map{height:280px;border-radius:12px;margin:10px 0}.nav{display:flex;gap:8px;flex-wrap:wrap}
+.nav a{flex:1;min-width:120px;text-align:center;background:var(--ac);color:#fff;text-decoration:none;padding:10px;border-radius:10px;font-size:14px;font-weight:600}
+.sw{display:flex;gap:8px}.sw button{flex:1}.x{float:right;background:none;border:0;color:var(--tx);font-size:22px;cursor:pointer}
 .note{font-size:12px;color:var(--mut);margin-top:20px}
 </style></head><body><main>
 <h1>Новосибирск ⇄ Барнаул</h1>
@@ -33,11 +40,15 @@ input[type=date],select{width:100%;margin-top:10px;padding:12px;border-radius:12
 <div id="list"></div>
 <p class="note">Прототип: расписание и цены примерные. Актуальные рейсы и покупка билета — по кнопке «Купить» на сайте продавца на выбранную дату.</p>
 </main>
+<div id="modal"><div id="sheet"><button class="x" id="close" aria-label="Закрыть">✕</button><b id="mt"></b>
+<div class="sw" style="margin-top:10px"><button class="chip on" id="pa">Откуда еду</button><button class="chip" id="pb">Куда приеду</button></div>
+<div id="map"></div><div class="nav" id="nav"></div><p class="note" id="mn">Метка приблизительная. Маршрут строится по названию места в навигаторе.</p></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="data.js"></script>
 <script>
 const NAMES={bus:"🚌 Автобус",train:"🚆 Поезд",plane:"✈️ Самолёт",ride:"🚗 Попутчики"};
 const CITY={"nsk-brn":["Новосибирск","Барнаул"],"brn-nsk":["Барнаул","Новосибирск"]};
-let dir="nsk-brn",type="all";
+let dir="nsk-brn",type="all",shown=[],map,marker,cur;
 const $=id=>document.getElementById(id);
 const today=new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
 $("date").value=today;$("date").min=today;
@@ -50,13 +61,28 @@ function render(){
   $("chips").innerHTML=["all",...Object.keys(NAMES)].map(k=>`<button class="chip ${k===type?"on":""}" data-k="${k}">${k==="all"?"Все":NAMES[k]}</button>`).join("");
   let r=TRIPS.filter(t=>t.dir===dir&&(type==="all"||t.type===type)&&(!t.days||t.days.includes(wd)));
   const s=$("sort").value;r.sort((a,b)=>s==="price"?a.price-b.price:s==="dur"?a.dur-b.dur:toMin(a.dep)-toMin(b.dep));
-  $("list").innerHTML=r.map(t=>{
+  shown=r;$("list").innerHTML=r.map((t,i)=>{
     const d0=toMin(t.dep),arr=d0+t.dur,next=arr>=1440?" (+1 день)":"";
     const stops=STOPS[t.type][dir].map(([n,f])=>`<div class="stop"><i></i><span>${fmt(d0+Math.round(t.dur*f))}</span><span>${n}</span></div>`).join("");
     return `<div class="card"><div class="top"><div><div class="time">${t.dep} → ${fmt(arr)}${next}</div><div class="mut">${NAMES[t.type]} · ${dur(t.dur)} · ${t.carrier}</div></div><div class="price">${t.price} ₽</div></div>
-    <div class="det"><div class="mut" style="margin-bottom:8px">${t.vehicle}</div>${stops}<a class="buy" target="_blank" rel="noopener" href="${BUY[t.type](date,dir)}">Купить билет на ${date.split("-").reverse().join(".")}</a></div></div>`}).join("")||'<p class="mut">На эту дату рейсов нет.</p>';
+    <div class="det"><div class="mut" style="margin-bottom:8px">${t.vehicle}</div>${stops}<button class="mapbtn" data-i="${i}">📍 Как добраться до вокзала на карте</button><a class="buy" target="_blank" rel="noopener" href="${BUY[t.type](date,dir)}">Купить билет на ${date.split("-").reverse().join(".")}</a></div></div>`}).join("")||'<p class="mut">На эту дату рейсов нет.</p>';
 }
-$("list").onclick=e=>{const c=e.target.closest(".card");if(c&&!e.target.closest("a"))c.classList.toggle("open")};
+function place(t,end){const c=(dir==="nsk-brn")!==end?"nsk":"brn";return PLACES[t.type][c]}
+function showPlace(end){
+  const pl=place(cur,end);$("pa").classList.toggle("on",!end);$("pb").classList.toggle("on",end);
+  $("mt").textContent=pl.name;const q=encodeURIComponent(pl.q+(pl.q.includes("Новосиб")||pl.q.includes("Барнаул")?"":""));
+  $("nav").innerHTML=`<a target="_blank" rel="noopener" href="https://yandex.ru/maps/?mode=routes&rtt=auto&rtext=~${q}">Яндекс Карты</a><a target="_blank" rel="noopener" href="https://2gis.ru/search/${q}">2ГИС</a><a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${q}">Google Maps</a>`;
+  if(window.L){
+    if(!map){map=L.map("map");L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"© OpenStreetMap"}).addTo(map)}
+    if(marker)marker.remove();marker=L.marker(pl.ll).addTo(map).bindPopup(pl.name).openPopup();map.setView(pl.ll,15);setTimeout(()=>map.invalidateSize(),50);
+  }else $("map").innerHTML='<p class="mut" style="padding:12px">Карта не загрузилась (нет интернета). Используйте кнопки навигаторов ниже.</p>';
+}
+$("pa").onclick=()=>showPlace(false);$("pb").onclick=()=>showPlace(true);
+$("close").onclick=()=>$("modal").classList.remove("on");
+$("modal").onclick=e=>{if(e.target.id==="modal")$("modal").classList.remove("on")};
+$("list").onclick=e=>{
+  const mb=e.target.closest(".mapbtn");if(mb){cur=shown[+mb.dataset.i];$("modal").classList.add("on");showPlace(false);return}
+const c=e.target.closest(".card");if(c&&!e.target.closest("a"))c.classList.toggle("open")};
 $("chips").onclick=e=>{if(e.target.dataset.k){type=e.target.dataset.k;render()}};
 $("swap").onclick=()=>{dir=dir==="nsk-brn"?"brn-nsk":"nsk-brn";render()};
 $("date").onchange=render;$("sort").onchange=render;render();
