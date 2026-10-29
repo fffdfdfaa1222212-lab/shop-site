@@ -1,0 +1,617 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: Oswald; src: url(fonts/Oswald.ttf); font-weight: 200 700; }
+@font-face { font-family: DSEG; src: url(fonts/DSEG7Classic-Bold.ttf); }
+html, body { margin: 0; background: #000; }
+canvas { display: block; }
+</style></head>
+<body><canvas id="c" width="1080" height="1920"></canvas>
+<script>
+// Deterministic frame renderer: window.render(t) draws the frame at time t (seconds).
+// Cue times (phrase starts from the voice-over) are injected as window.CUES before rendering.
+const W = 1080, H = 1920;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+let C = null;
+
+// ---------- helpers ----------
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, k) => a + (b - a) * k;
+const ease = k => (k = clamp(k), k * k * (3 - 2 * k));
+const easeOut = k => 1 - Math.pow(1 - clamp(k), 3);
+const prog = (t, a, d) => clamp((t - a) / d);
+function hash(n) { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+function noise1(x) { const i = Math.floor(x), f = x - i; return lerp(hash(i), hash(i + 1), f * f * (3 - 2 * f)); }
+
+function rect(x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); }
+function circle(x, y, r, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+function rrect(x, y, w, h, r, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fill(); }
+function glow(col, blur, fn) { ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = blur; fn(); ctx.restore(); }
+function radial(x, y, r0, r1, stops) {
+  const g = ctx.createRadialGradient(x, y, r0, x, y, r1);
+  stops.forEach(([o, c]) => g.addColorStop(o, c)); return g;
+}
+function linear(x0, y0, x1, y1, stops) {
+  const g = ctx.createLinearGradient(x0, y0, x1, y1);
+  stops.forEach(([o, c]) => g.addColorStop(o, c)); return g;
+}
+function text(str, x, y, size, col, opts = {}) {
+  ctx.save();
+  ctx.font = `${opts.weight || 700} ${size}px ${opts.font || 'Oswald'}`;
+  ctx.textAlign = opts.align || 'center'; ctx.textBaseline = 'middle';
+  if (opts.ls) ctx.letterSpacing = opts.ls + 'px';
+  if (opts.stroke) { ctx.lineJoin = 'round'; ctx.lineWidth = opts.stroke; ctx.strokeStyle = opts.strokeCol || '#000'; ctx.strokeText(str, x, y); }
+  if (opts.glow) { ctx.shadowColor = opts.glow; ctx.shadowBlur = opts.glowBlur || 30; }
+  ctx.fillStyle = col; ctx.fillText(str, x, y);
+  ctx.restore();
+}
+// red/cyan split text, like a broken VHS
+function aberrText(str, x, y, size, amt, opts = {}) {
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  text(str, x - amt, y, size, 'rgba(255,0,40,0.9)', opts);
+  text(str, x + amt, y + amt * 0.3, size, 'rgba(0,220,255,0.75)', opts);
+  ctx.restore();
+  text(str, x, y, size, opts.col || '#f4f1ea', opts);
+}
+function camera(cx, cy, s, rot = 0) {
+  ctx.translate(W / 2, H / 2); ctx.rotate(rot); ctx.scale(s, s); ctx.translate(-cx, -cy);
+}
+function shake(t, t0, amp, dur = 0.5) {
+  const k = 1 - prog(t, t0, dur); if (t < t0 || k <= 0) return [0, 0];
+  const a = amp * k * k; return [(noise1(t * 60) - 0.5) * 2 * a, (noise1(t * 60 + 50) - 0.5) * 2 * a];
+}
+
+// ---------- precomputed overlays ----------
+const grain = [];
+for (let i = 0; i < 6; i++) {
+  const g = document.createElement('canvas'); g.width = 360; g.height = 640;
+  const gx = g.getContext('2d'), img = gx.createImageData(360, 640);
+  for (let p = 0; p < img.data.length; p += 4) {
+    const v = hash(i * 1e6 + p) * 255; img.data[p] = img.data[p + 1] = img.data[p + 2] = v; img.data[p + 3] = 255;
+  }
+  gx.putImageData(img, 0, 0); grain.push(g);
+}
+const scan = document.createElement('canvas'); scan.width = W; scan.height = H;
+{ const s = scan.getContext('2d'); s.fillStyle = 'rgba(0,0,0,0.22)'; for (let y = 0; y < H; y += 4) s.fillRect(0, y, W, 2); }
+
+// ---------- reusable drawings ----------
+function sevenSeg(str, x, y, size, on, col = '#ff2a2a') {
+  // unlit segments, then lit digits with glow
+  text('88:88', x, y, size, 'rgba(255,40,40,0.07)', { font: 'DSEG', weight: 400 });
+  if (on) text(str, x, y, size, col, { font: 'DSEG', weight: 400, glow: col, glowBlur: 50 });
+}
+
+function analogClock(x, y, r, hh, mm, ss, opts = {}) {
+  ctx.save(); ctx.translate(x, y);
+  circle(0, 0, r * 1.08, opts.rim || '#2a2a2e');
+  circle(0, 0, r, opts.face || '#d9d4c7');
+  ctx.strokeStyle = '#1a1a1a';
+  for (let i = 0; i < 60; i++) {
+    const a = i / 60 * Math.PI * 2, big = i % 5 === 0;
+    ctx.lineWidth = big ? r * 0.05 : r * 0.015;
+    ctx.beginPath();
+    ctx.moveTo(Math.sin(a) * r * (big ? 0.78 : 0.86), -Math.cos(a) * r * (big ? 0.78 : 0.86));
+    ctx.lineTo(Math.sin(a) * r * 0.93, -Math.cos(a) * r * 0.93); ctx.stroke();
+  }
+  const hand = (ang, len, w, col) => {
+    ctx.save(); ctx.rotate(ang); ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, len * 0.18); ctx.lineTo(0, -len); ctx.stroke(); ctx.restore();
+  };
+  hand((hh + mm / 60) / 12 * Math.PI * 2, r * 0.5, r * 0.07, '#111');
+  hand(mm / 60 * Math.PI * 2, r * 0.75, r * 0.045, '#111');
+  hand(ss / 60 * Math.PI * 2, r * 0.85, r * 0.015, '#c0141c');
+  circle(0, 0, r * 0.05, '#c0141c');
+  // glass sheen
+  ctx.fillStyle = linear(-r, -r, r, r, [[0, 'rgba(255,255,255,0.18)'], [0.5, 'rgba(255,255,255,0)']]);
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// Max / his double. view: 'back' | 'profile' | 'front'. lit: 0..1 how much color is visible (0 = silhouette)
+function worker(x, y, s, view, lit = 1, opts = {}) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  const mix = (c) => {
+    if (lit >= 1) return c;
+    const n = parseInt(c.slice(1), 16), ch = [n >> 16, (n >> 8) & 255, n & 255].map(v => Math.round(lerp(5, v, lit)));
+    return `rgb(${ch.join(',')})`;
+  };
+  const jacket = mix('#e2611b'), jacketDk = mix('#a8410f'), stripe = mix('#d8e0d0');
+  const skin = mix(opts.pale ? '#b9b2a6' : '#c98f6e'), helmet = mix('#f08a1c');
+  // torso (origin = neck base)
+  ctx.fillStyle = jacket; ctx.beginPath();
+  ctx.moveTo(-150, 40); ctx.quadraticCurveTo(-170, 10, -110, -10); ctx.lineTo(110, -10);
+  ctx.quadraticCurveTo(170, 10, 150, 40); ctx.lineTo(175, 520); ctx.lineTo(-175, 520); ctx.closePath(); ctx.fill();
+  rect(-175, 230, 350, 26, stripe); rect(-175, 300, 350, 26, stripe);
+  if (view === 'front') { rect(-6, -5, 12, 525, jacketDk); }
+  // arms (raised arm handled by caller via opts.armUp 0..1)
+  const arm = (side, up) => {
+    ctx.save(); ctx.translate(side * 145, 30);
+    ctx.rotate(-side * (0.06 + up * 2.25));
+    rrect(-38, 0, 76, 400, 34, jacket); rect(-38, 210, 76, 22, stripe);
+    circle(0, 410, 36, skin);
+    ctx.restore();
+  };
+  arm(-1, 0); arm(1, opts.armUp || 0);
+  // neck + head
+  rect(-38, -60, 76, 70, skin);
+  if (view === 'back') {
+    ctx.fillStyle = mix('#2b211b'); ctx.beginPath(); ctx.ellipse(0, -130, 92, 105, 0, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = skin; ctx.beginPath(); ctx.ellipse(view === 'profile' ? 10 : 0, -130, 88, 108, 0, 0, Math.PI * 2); ctx.fill();
+    if (view === 'profile') {
+      ctx.beginPath(); ctx.moveTo(90, -140); ctx.lineTo(118, -100); ctx.lineTo(88, -92); ctx.fill(); // nose
+      circle(55, -140, 9, opts.eyeCol || '#101010');
+    } else {
+      const ey = -140, ec = opts.eyeCol || '#101010';
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(-36, ey, 26, 18, 0, 0, Math.PI * 2); ctx.ellipse(36, ey, 26, 18, 0, 0, Math.PI * 2); ctx.fill();
+      circle(-36, ey, 15, ec); circle(36, ey, 15, ec);
+      if (opts.glint) { circle(-33, ey - 3, 3.5, '#fff'); circle(39, ey - 3, 3.5, '#fff'); }
+      ctx.strokeStyle = 'rgba(40,10,10,0.7)'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      const sm = opts.smile || 0;
+      ctx.beginPath(); ctx.moveTo(-28 - sm * 22, -70 - sm * 8); ctx.quadraticCurveTo(0, -68 + sm * 22, 28 + sm * 22, -70 - sm * 8); ctx.stroke();
+      ctx.fillStyle = linear(0, -240, 0, -20, [[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0.35)']]);
+      ctx.beginPath(); ctx.ellipse(0, -130, 88, 108, 0, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  // helmet
+  ctx.fillStyle = helmet; ctx.beginPath(); ctx.ellipse(0, -175, 112, 92, 0, Math.PI, 0); ctx.fill();
+  rrect(-128, -182, 256, 26, 13, helmet);
+  ctx.fillStyle = mix('#ffb35a'); ctx.beginPath(); ctx.ellipse(-30, -225, 40, 18, -0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// skyline buildings, generated once
+function makeLayer(seed, n, baseY, hMin, hMax, wMin, wMax, win) {
+  const out = []; let x = -60, i = 0;
+  while (x < W + 60) {
+    const w = lerp(wMin, wMax, hash(seed + i * 3)), h = lerp(hMin, hMax, hash(seed + i * 3 + 1));
+    const b = { x, y: baseY - h, w, h, wins: [] };
+    for (let wy = b.y + win.pad; wy < baseY - win.pad; wy += win.sy)
+      for (let wx = x + win.pad; wx < x + w - win.pad - win.w; wx += win.sx) {
+        const r = hash(seed + wx * 0.37 + wy * 0.91);
+        if (r < 0.62) b.wins.push({ x: wx, y: wy, r, tone: hash(r * 999) });
+      }
+    out.push(b); x += w + lerp(4, 30, hash(seed + i * 3 + 2)); i++;
+  }
+  return out;
+}
+const farLayer = makeLayer(11, 0, 1250, 380, 760, 110, 220, { w: 14, h: 20, sx: 28, sy: 38, pad: 16 });
+const nearLayer = makeLayer(57, 0, 1500, 300, 650, 170, 320, { w: 24, h: 34, sx: 46, sy: 62, pad: 22 });
+// the one window that stays lit
+const SPECIAL = (() => { const b = farLayer[4]; return b.wins.find(w => w.y > b.y + b.h * 0.35) || b.wins[0]; })();
+
+// ---------- scenes ----------
+function sceneHook(t) {
+  rect(0, 0, W, H, '#040404');
+  // red room light pulsing like an alarm
+  const pulse = 0.5 + 0.5 * Math.sin(t * 7);
+  ctx.fillStyle = radial(W / 2, 560, 50, 900, [[0, `rgba(120,0,0,${0.18 + 0.12 * pulse})`], [1, 'rgba(0,0,0,0)']]);
+  ctx.fillRect(0, 0, W, H);
+  const on = (t % 0.9) < 0.6;
+  sevenSeg('03:07', W / 2, 560, 210, on);
+  // title slams in on frame 1
+  const k = easeOut(prog(t, 0.05, 0.25));
+  const s = lerp(1.6, 1, k);
+  const glitch = (t > C.hook2 && t < C.hook2 + 0.35) || t < 0.2;
+  ctx.save(); ctx.translate(W / 2, 860); ctx.scale(s, s); ctx.globalAlpha = k;
+  aberrText('НЕ ВКЛЮЧАЙ', 0, 0, 150, glitch ? 14 : 4, { ls: 4 });
+  aberrText('СВЕТ', 0, 215, 230, glitch ? 20 : 5, { ls: 10, col: '#ff3b3b' });
+  ctx.restore();
+  // light switch, a hand creeping toward it
+  const sx = W / 2, sy = 1690;
+  rrect(sx - 70, sy - 110, 140, 220, 14, '#1b1b1d'); rrect(sx - 28, sy - 50, 56, 100, 8, '#2c2c30');
+  rrect(sx - 22, sy + 5, 44, 40, 6, '#3a3a40');
+  const reach = ease(prog(t, 0.6, C.hook2 - 0.6));
+  const back = ease(prog(t, C.hook2 + 0.1, 0.6)); // flinches back on "не включай"
+  const hx = lerp(W + 120, sx + 120, reach * (1 - back * 0.8));
+  ctx.fillStyle = '#5e4a3e';
+  ctx.beginPath(); ctx.ellipse(hx, sy + 10, 70, 45, -0.15, 0, Math.PI * 2); ctx.fill();
+  rrect(hx - 120, sy - 8, 90, 26, 13, '#5e4a3e'); rect(hx + 40, sy - 30, W, 80, '#3a2d26');
+  if (glitch) for (let i = 0; i < 7; i++) {
+    const y = hash(Math.floor(t * 30) + i) * H, h = 10 + hash(i + t) * 60;
+    ctx.drawImage(cv, 0, y, W, h, (hash(i * 7 + Math.floor(t * 30)) - 0.5) * 80, y, W, h);
+  }
+}
+
+function sceneCity(t) {
+  const blackout = C.city + 0.2;
+  const dark = ease(prog(t, blackout, 1.3));
+  ctx.fillStyle = linear(0, 0, 0, H, [[0, '#04060d'], [0.6, lerp(0, 1, 1 - dark) > 0.01 ? '#1a1830' : '#0b0f1e'], [1, '#05060a']]);
+  ctx.fillRect(0, 0, W, H);
+  // stars appear once the city goes dark
+  for (let i = 0; i < 90; i++) {
+    const a = dark * (0.4 + 0.6 * noise1(t * 2 + i)) * 0.8;
+    circle(hash(i) * W, hash(i + 99) * 900, 1 + hash(i + 7) * 1.8, `rgba(220,225,255,${a})`);
+  }
+  // camera: slow push toward the last lit window
+  const z = lerp(1, 2.3, ease(prog(t, C.window - 0.2, C.max - C.window + 0.4)));
+  const fx = lerp(W / 2, SPECIAL.x + 7, ease(prog(t, C.window - 0.2, 1.2)));
+  const fy = lerp(H / 2, SPECIAL.y + 10, ease(prog(t, C.window - 0.2, 1.2)));
+  ctx.save(); camera(fx, fy, z);
+  // city haze glow before blackout
+  ctx.fillStyle = radial(W / 2, 1400, 100, 1100, [[0, `rgba(255,150,60,${0.28 * (1 - dark)})`], [1, 'rgba(0,0,0,0)']]);
+  ctx.fillRect(-W, 0, W * 3, H);
+  const drawLayer = (L, col, ww, wh, depth) => {
+    for (const b of L) {
+      rect(b.x, b.y, b.w, b.h + 600, col);
+      for (const w of b.wins) {
+        const off = blackout + (w.x / W) * 1.1 + w.r * 0.25 + depth * 0.15;
+        const isSpecial = w === SPECIAL;
+        let on = t < off;
+        if (!on && t < off + 0.12) on = hash(Math.floor(t * 40) + w.x) > 0.5; // dying flicker
+        if (isSpecial) on = true;
+        const lumCol = w.tone > 0.8 ? '#bfe0ff' : w.tone > 0.5 ? '#ffd98a' : '#ffbf5e';
+        if (on) {
+          if (isSpecial) glow('#ffcc55', 40, () => rect(w.x, w.y, ww, wh, '#ffd36b'));
+          else rect(w.x, w.y, ww, wh, lumCol);
+        } else rect(w.x, w.y, ww, wh, 'rgba(255,255,255,0.03)');
+      }
+    }
+  };
+  drawLayer(farLayer, '#0d1120', 14, 20, 0);
+  drawLayer(nearLayer, '#06070c', 24, 34, 1);
+  rect(-W, 1500, W * 3, 900, '#030305');
+  ctx.restore();
+}
+
+function sceneControl(t) {
+  rect(0, 0, W, H, '#0b1013');
+  // console panel
+  rrect(60, 360, 960, 980, 26, '#18222a'); rrect(80, 380, 920, 940, 20, '#1d2b33');
+  text('ПОДСТАНЦИЯ №4', W / 2, 440, 46, '#7f98a3', { ls: 6, weight: 500 });
+  // three gauges reading normal
+  const gx = [250, 540, 830];
+  gx.forEach((x, i) => {
+    const y = 680, r = 120;
+    circle(x, y, r + 14, '#0d1418'); circle(x, y, r, '#cfd6cf');
+    ctx.lineWidth = 22; ctx.strokeStyle = '#3aa356';
+    ctx.beginPath(); ctx.arc(x, y, r - 22, Math.PI * 1.2, Math.PI * 1.55); ctx.stroke();
+    ctx.strokeStyle = '#c23b2b'; ctx.beginPath(); ctx.arc(x, y, r - 22, Math.PI * 1.75, Math.PI * 1.85); ctx.stroke();
+    const ang = Math.PI * 1.38 + (noise1(t * 3 + i * 10) - 0.5) * 0.12;
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(ang) * r * 0.85, y + Math.sin(ang) * r * 0.85); ctx.stroke();
+    circle(x, y, 10, '#111');
+    text(['кВ', 'А', 'Гц'][i], x, y + 60, 34, '#333', { weight: 500 });
+  });
+  const okOn = t > C.max2 - 0.1;
+  rrect(340, 850, 400, 90, 12, okOn ? '#123d1f' : '#0f1d14');
+  text('НОРМА', W / 2, 897, 56, okOn ? '#5dff8a' : '#2a5236', okOn ? { glow: '#3dff6a', glowBlur: 30, ls: 8 } : { ls: 8 });
+  // indicator lamps go out one by one
+  for (let i = 0; i < 8; i++) {
+    const x = 175 + i * 104, y = 1060;
+    const off = C.max3 + 0.15 + i * 0.13;
+    const on = t < off;
+    circle(x, y, 38, '#0c1215');
+    if (on) glow('#ffd34d', 35, () => circle(x, y, 28, i % 3 === 0 ? '#ffe27a' : '#ffcf4a'));
+    else circle(x, y, 28, '#2a2618');
+  }
+  for (let i = 0; i < 5; i++) rrect(150 + i * 165, 1160, 120, 90, 10, '#121a1f');
+  // the room light itself dims together with the lamps
+  const roomDark = ease(prog(t, C.max3 + 0.15, 1.1));
+  rect(0, 0, W, H, `rgba(0,0,0,${0.55 * roomDark})`);
+  // Max seen from behind, turns his head after the last lamp dies
+  const turn = t > C.max3 + 1.25;
+  const lit = 1 - 0.6 * roomDark;
+  worker(300, 1520 + Math.sin(t * 2) * 4, 1.35, turn ? 'profile' : 'back', lit);
+  // cold flashlight-ish rim from the gauges
+  ctx.fillStyle = radial(540, 680, 50, 900, [[0, 'rgba(120,200,255,0.06)'], [1, 'rgba(0,0,0,0)']]);
+  ctx.fillRect(0, 0, W, H);
+}
+
+function scenePhone(t) {
+  const lt = t - C.phone;
+  rect(0, 0, W, H, '#060607');
+  const [sx, sy] = shake(t, C.phone, 6, 0.3);
+  ctx.save(); ctx.translate(sx, sy);
+  // hand + phone
+  ctx.fillStyle = '#4c3a30'; ctx.beginPath(); ctx.ellipse(560, 1420, 300, 210, -0.2, 0, Math.PI * 2); ctx.fill();
+  rrect(290, 420, 500, 1000, 60, '#0e0e10'); rrect(310, 440, 460, 960, 44, '#020203');
+  const alive = lt < 0.28 || (lt > 0.45 && lt < 0.52);
+  if (alive) {
+    rrect(310, 440, 460, 960, 44, '#1d2440');
+    text('03:07', 540, 700, 130, '#e8ecff', { weight: 300 });
+    rrect(470, 1140, 140, 140, 70, 'rgba(255,255,255,0.08)');
+  } else {
+    // dead screen: faint reflection and a battery icon blinking empty
+    ctx.fillStyle = linear(310, 440, 770, 1400, [[0, 'rgba(255,255,255,0.06)'], [0.4, 'rgba(255,255,255,0)'], [1, 'rgba(255,255,255,0.02)']]);
+    ctx.beginPath(); ctx.roundRect(310, 440, 460, 960, 44); ctx.fill();
+    if (lt % 0.5 < 0.25) {
+      ctx.strokeStyle = '#a11'; ctx.lineWidth = 8; ctx.strokeRect(470, 880, 130, 64); rect(600, 898, 14, 28, '#a11');
+    }
+  }
+  // thumb pressing
+  ctx.fillStyle = '#5a463a'; ctx.beginPath(); ctx.ellipse(800, 1000 + Math.sin(lt * 18) * 6, 60, 120, 0.4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function sceneCar(t) {
+  const lt = t - C.car;
+  rect(0, 0, W, H, '#05060a');
+  rect(0, 1240, W, 700, '#0c0c10');
+  for (let i = 0; i < 5; i++) rect(i * 260 + 40, 1420, 140, 14, '#1c1c22');
+  const lightsOn = lt < 0.35 || (lt > 0.48 && lt < 0.56);
+  const vib = lt < 0.6 ? Math.sin(lt * 90) * 3 : 0;
+  ctx.save(); ctx.translate(0, vib);
+  if (lightsOn) {
+    ctx.fillStyle = linear(170, 0, -200, 0, [[0, 'rgba(255,240,190,0.55)'], [1, 'rgba(255,240,190,0)']]);
+    ctx.beginPath(); ctx.moveTo(180, 1160); ctx.lineTo(-300, 1050); ctx.lineTo(-300, 1420); ctx.closePath(); ctx.fill();
+  }
+  // car body
+  rrect(150, 1080, 800, 180, 50, '#1a1f2a');
+  ctx.fillStyle = '#151a24'; ctx.beginPath(); ctx.moveTo(330, 1090); ctx.quadraticCurveTo(420, 930, 580, 930); ctx.lineTo(760, 940); ctx.quadraticCurveTo(840, 990, 880, 1090); ctx.fill();
+  ctx.fillStyle = '#0a0d14'; ctx.beginPath(); ctx.moveTo(380, 1085); ctx.quadraticCurveTo(440, 965, 560, 960); ctx.lineTo(560, 1085); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(590, 960); ctx.lineTo(740, 965); ctx.quadraticCurveTo(800, 1010, 830, 1085); ctx.lineTo(590, 1085); ctx.fill();
+  circle(330, 1270, 82, '#070709'); circle(330, 1270, 40, '#24262c');
+  circle(800, 1270, 82, '#070709'); circle(800, 1270, 40, '#24262c');
+  if (lightsOn) glow('#fff2c0', 50, () => rrect(150, 1120, 34, 40, 10, '#fff4cf'));
+  else rrect(150, 1120, 34, 40, 10, '#3a3a33');
+  // dashboard glow dies
+  if (lightsOn) circle(520, 1040, 20, 'rgba(90,200,255,0.5)');
+  ctx.restore();
+  // exhaust puff stops
+  if (lt < 0.5) for (let i = 0; i < 6; i++) {
+    const p = (lt * 2 + i / 6) % 1;
+    circle(960 + p * 120, 1215 - p * 60, 18 + p * 40, `rgba(160,160,170,${0.18 * (1 - p)})`);
+  }
+}
+
+function sceneClocks(t) {
+  const lt = t - C.clock, split = 1.2;
+  if (lt < split) {
+    rect(0, 0, W, H, '#0a0908');
+    ctx.fillStyle = radial(W / 2, 860, 50, 800, [[0, '#2a2420'], [1, '#0a0908']]); ctx.fillRect(0, 0, W, H);
+    // second hand stuck, twitching on the same tick
+    const sec = 12 + (Math.floor(lt * 4) % 2 ? 0.35 : 0);
+    const z = lerp(1, 1.12, lt / split);
+    ctx.save(); ctx.translate(W / 2, 860); ctx.scale(z, z); ctx.translate(-W / 2, -860);
+    analogClock(W / 2, 860, 380, 3, 7, sec);
+    ctx.restore();
+  } else {
+    // 2x2 grid: every clock in the city, all 03:07
+    rect(0, 0, W, H, '#050505');
+    const cells = [[0, 320], [540, 320], [0, 960], [540, 960]];
+    const k = lt - split;
+    cells.forEach(([x, y], i) => {
+      if (k < i * 0.09) return;
+      ctx.save(); ctx.beginPath(); ctx.rect(x + 8, y + 8, 524, 624); ctx.clip();
+      rect(x, y, 540, 640, ['#14110e', '#0c0c0c', '#0b100d', '#120f12'][i]);
+      if (i === 0) analogClock(x + 270, y + 320, 200, 3, 7, 12, { face: '#e5dccb' });
+      if (i === 1) { ctx.save(); ctx.translate(x + 270, y + 320); ctx.scale(0.36, 0.36); ctx.translate(-W / 2, -720); sevenSeg('03:07', W / 2, 720, 210, true); ctx.restore(); }
+      if (i === 2) { rrect(x + 70, y + 210, 400, 200, 16, '#030503'); ctx.save(); ctx.translate(x + 270, y + 310); ctx.scale(0.26, 0.26); ctx.translate(-W / 2, -720); sevenSeg('03:07', W / 2, 720, 210, true, '#46ff7a'); ctx.restore(); }
+      if (i === 3) { rect(x + 220, y, 100, 640, '#2a2420'); analogClock(x + 270, y + 320, 150, 3, 7, 12, { face: '#101014', rim: '#8a8a90' });
+        ctx.save(); ctx.translate(x + 270, y + 320); ctx.globalCompositeOperation = 'difference'; ctx.restore(); }
+      ctx.restore();
+    });
+    text('03:07', W / 2, 1720, 90, '#ff3b3b', { glow: '#ff0000', glowBlur: 30, ls: 8 });
+  }
+}
+
+function sceneWalk(t) {
+  const lt = t - C.walk;
+  rect(0, 0, W, H, '#05060b');
+  ctx.fillStyle = linear(0, 0, 0, H, [[0, '#04050b'], [1, '#0d0f19']]); ctx.fillRect(0, 0, W, H);
+  // far building with the single lit window
+  rect(620, 300, 360, 1300, '#0b0e18');
+  for (let r = 0; r < 12; r++) for (let c = 0; c < 4; c++) rect(650 + c * 82, 340 + r * 100, 36, 52, 'rgba(255,255,255,0.025)');
+  glow('#ffcc55', 50, () => rect(650 + 2 * 82, 340 + 3 * 100, 36, 52, '#ffd36b'));
+  // parallax street
+  const scroll = lt * 160;
+  for (let i = -1; i < 6; i++) {
+    const x = ((i * 300 - scroll * 0.5) % 1800 + 1800) % 1800 - 300;
+    rect(x, 900 + hash(i) * 200, 220, 900, '#070910');
+  }
+  rect(0, 1500, W, 420, '#040406');
+  for (let i = -1; i < 8; i++) rect(((i * 180 - scroll) % 1440 + 1440) % 1440 - 180, 1600, 90, 10, '#15161c');
+  // flashlight beam
+  const bob = Math.abs(Math.sin(lt * 6)) * 12;
+  const hx = 360, hy = 1060 - bob;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const beamA = -0.12 + Math.sin(lt * 2.3) * 0.05;
+  ctx.translate(hx + 120, hy + 90); ctx.rotate(beamA);
+  ctx.fillStyle = linear(0, 0, 900, 0, [[0, 'rgba(255,235,170,0.55)'], [1, 'rgba(255,235,170,0)']]);
+  ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(950, -230); ctx.lineTo(950, 260); ctx.lineTo(0, 10); ctx.fill();
+  ctx.restore();
+  // Max walking, side silhouette with a hint of orange
+  ctx.save(); ctx.translate(hx, hy);
+  const step = Math.sin(lt * 6);
+  ['#0a0a0c', '#121216'].forEach((col, i) => {
+    ctx.save(); ctx.translate(0, 300); ctx.rotate((i ? 1 : -1) * step * 0.4);
+    rrect(-22, 0, 44, 230, 20, col); ctx.restore();
+  });
+  rrect(-70, 0, 140, 320, 40, '#6d2e0e'); rect(-70, 150, 140, 18, '#8f9a8c');
+  ctx.save(); ctx.translate(30, 40); ctx.rotate(-1.3); rrect(-18, 0, 36, 140, 16, '#5a260b'); ctx.restore();
+  rrect(130, 70, 50, 30, 8, '#222'); // flashlight
+  ctx.fillStyle = '#2a1f19'; ctx.beginPath(); ctx.ellipse(10, -60, 55, 65, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#c4630f'; ctx.beginPath(); ctx.ellipse(10, -88, 72, 50, 0, Math.PI, 0); ctx.fill(); rrect(-60, -92, 140, 16, 8, '#c4630f');
+  ctx.restore();
+}
+
+function sceneFacade(t) {
+  const lt = t - C.floor;
+  const floors = 9, fh = 330, top = 200;
+  // building fills the screen, camera tilts up from floor 6 to floor 9
+  const camY = lerp(top + 175 + 4.5 * fh, top + 175, ease(prog(t, C.floor, C.third - C.floor + 0.5)));
+  const zoom = lerp(1, 1.55, ease(prog(t, C.third + 0.2, C.man - C.third)));
+  rect(0, 0, W, H, '#05060b');
+  const tgX = 90 + 2 * 245 + 85, tgY = top + 175;
+  ctx.save(); camera(lerp(W / 2, tgX, ease(prog(t, C.third + 0.2, 0.8))), camY, zoom);
+  rect(-200, top - 400, W + 400, floors * fh + 2400, '#0c0f18');
+  for (let f = 0; f < floors; f++) {
+    const y = top + f * fh, num = floors - f;
+    rect(-200, y + fh - 14, W + 400, 14, '#090b12');
+    for (let c = 0; c < 4; c++) {
+      const x = 90 + c * 245;
+      const target = num === 9 && c === 2;
+      rect(x, y + 70, 170, 210, '#04050a');
+      if (target) {
+        const on = t > C.third - 0.05 ? 1 : 0.35;
+        glow('#ffc84a', 80 * on, () => rect(x, y + 70, 170, 210, on > 0.5 ? '#ffd36b' : '#5a4720'));
+        rect(x + 80, y + 70, 10, 210, '#2a1d08'); rect(x, y + 165, 170, 10, '#2a1d08');
+      } else {
+        rect(x + 80, y + 70, 10, 210, '#0c0f18'); rect(x, y + 165, 170, 10, '#0c0f18');
+      }
+    }
+    text(String(num), 40, y + 175, 56, `rgba(255,255,255,${num === 9 ? 0.75 : 0.18})`, { weight: 500 });
+  }
+  // flashlight spot climbing the wall
+  const spotY = lerp(top + 7 * fh, top + 175, ease(prog(t, C.floor, C.third - C.floor + 0.3)));
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = radial(600, spotY, 10, 260, [[0, 'rgba(255,235,170,0.35)'], [1, 'rgba(255,235,170,0)']]);
+  ctx.fillRect(0, spotY - 300, W, 600);
+  ctx.restore();
+  // counter: "этаж 9 / окно 3"
+  if (t > C.floor + 0.2) text('ЭТАЖ 9', W / 2, 260, 64, '#f4f1ea', { ls: 10, weight: 500, stroke: 8 });
+  if (t > C.third) text('ОКНО 3', W / 2, 350, 64, '#ffcf55', { ls: 10, weight: 500, stroke: 8 });
+}
+
+function windowRoom(t, push) {
+  // interior seen through the window
+  rect(0, 0, W, H, '#05060b');
+  ctx.save(); camera(push.x, push.y, push.z);
+  rect(0, 0, W, H, '#0c0f18');
+  const wx = 140, wy = 330, ww = 800, wh = 1260;
+  ctx.fillStyle = radial(540, 700, 80, 1000, [[0, '#ffe39a'], [0.6, '#e0a33e'], [1, '#6b4413']]);
+  ctx.fillRect(wx, wy, ww, wh);
+  // wall clock inside the room (top-right)
+  const clockX = 820, clockY = 520;
+  analogClock(clockX, clockY, 70, 3, 6, 0, { face: '#efe6cf', rim: '#5a3b12' });
+  return { wx, wy, ww, wh };
+}
+function windowFrame(r) {
+  const { wx, wy, ww, wh } = r;
+  // curtains
+  ctx.fillStyle = 'rgba(90,30,20,0.85)';
+  ctx.beginPath(); ctx.moveTo(wx, wy); ctx.quadraticCurveTo(wx + 150, wy + 600, wx + 60, wy + wh); ctx.lineTo(wx, wy + wh); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(wx + ww, wy); ctx.quadraticCurveTo(wx + ww - 150, wy + 600, wx + ww - 60, wy + wh); ctx.lineTo(wx + ww, wy + wh); ctx.fill();
+  // frame + cross bars
+  ctx.strokeStyle = '#1a1308'; ctx.lineWidth = 40; ctx.strokeRect(wx, wy, ww, wh);
+  rect(wx, wy + 150, ww, 24, '#1a1308');
+  ctx.restore();
+}
+
+function sceneWindow(t) {
+  // "В окне стоял человек" -> silhouette, "В его куртке" -> colors come in, "С его лицом" -> push in on the face
+  const lit = ease(prog(t, C.jacket, 0.9));
+  const faceZ = ease(prog(t, C.face, 1.6));
+  const beat = t > C.face ? Math.pow(Math.max(0, Math.sin((t - C.face) * Math.PI * 2 * 1.1)), 12) : 0;
+  const push = { x: lerp(540, 540, faceZ), y: lerp(1000, 850, faceZ), z: lerp(1.0, 2.6, faceZ) * (1 + beat * 0.015) };
+  const r = windowRoom(t, push);
+  worker(540, 1080, 1.25, 'front', lit, { pale: true, eyeCol: '#050505', glint: t > C.face + 0.8, smile: ease(prog(t, C.face + 1.0, 0.9)) });
+  windowFrame(r);
+  // heartbeat vignette pulse
+  rect(0, 0, W, H, `rgba(60,0,0,${beat * 0.25})`);
+}
+
+function sceneTwin(t) {
+  const lt = t - C.twin;
+  if (t < C.was) {
+    const r = windowRoom(t, { x: 600, y: 800, z: 1.25 });
+    const up = ease(prog(t, C.twin + 0.3, 1.0));
+    worker(540, 1080, 1.25, 'front', 1, { pale: true, eyeCol: '#050505', glint: true, armUp: up * 1.25, smile: 1 });
+    windowFrame(r);
+    return;
+  }
+  // close-up on the clock: 03:07 flips to 03:06, hands run backwards
+  rect(0, 0, W, H, '#050303');
+  ctx.fillStyle = radial(W / 2, 860, 40, 900, [[0, 'rgba(110,0,0,0.35)'], [1, 'rgba(0,0,0,0)']]); ctx.fillRect(0, 0, W, H);
+  const flipped = t > C['306'] - 0.05;
+  const rev = Math.max(0, t - C['306']);
+  const z = lerp(1, 1.18, prog(t, C.was, 3));
+  ctx.save(); ctx.translate(W / 2, 860); ctx.scale(z, z); ctx.translate(-W / 2, -860);
+  analogClock(W / 2, 860, 330, 3, flipped ? 6 - rev * 0.6 : 7, 30 - rev * 40, { face: '#d9d0bb' });
+  ctx.restore();
+  const g = flipped && rev < 0.35;
+  ctx.save(); ctx.translate(W / 2, 1420); ctx.scale(0.62, 0.62); ctx.translate(-W / 2, -720);
+  sevenSeg(flipped ? '03:06' : '03:07', W / 2 + (g ? (hash(Math.floor(t * 30)) - 0.5) * 40 : 0), 720, 210, true);
+  ctx.restore();
+}
+
+function sceneEnd(t) {
+  rect(0, 0, W, H, '#020202');
+  const k = easeOut(prog(t, C.end + 0.35, 0.35));
+  ctx.save(); ctx.globalAlpha = k; ctx.translate(W / 2, 900); ctx.scale(lerp(1.3, 1, k), lerp(1.3, 1, k));
+  aberrText('ЧАСТЬ 2', 0, 0, 200, 6 + 10 * (1 - k), { ls: 12 });
+  ctx.restore();
+  ctx.globalAlpha = k * 0.8;
+  text('что будет, если включить свет?', W / 2, 1100, 58, '#bdb7ab', { weight: 400, ls: 2 });
+  ctx.globalAlpha = 1;
+}
+
+// ---------- captions ----------
+const CAPS = {
+  hook: 'ЕСЛИ В 3:07 НОЧИ\nУ ТЕБЯ ПОГАС СВЕТ', hook2: 'НЕ ВКЛЮЧАЙ ЕГО',
+  city: 'ТОЙ НОЧЬЮ ПОГАС\nВЕСЬ ГОРОД', city2: 'ВЕСЬ…', window: '…КРОМЕ ОДНОГО ОКНА',
+  max: 'МАКС, ДЕЖУРНЫЙ ЭЛЕКТРИК,\nПРОВЕРИЛ ПОДСТАНЦИЮ', max2: 'ТОК БЫЛ', max3: 'НО СВЕТ\nНЕ ГОРЕЛ НИГДЕ',
+  phone: 'ТЕЛЕФОНЫ МЕРТВЫ', car: 'МАШИНЫ ЗАГЛОХЛИ', clock: 'ВСЕ ЧАСЫ В ГОРОДЕ\nВСТАЛИ НА 3:07',
+  walk: 'ОН ПОШЁЛ\nНА ЕДИНСТВЕННЫЙ СВЕТ', floor: 'ДЕВЯТЫЙ ЭТАЖ', third: 'ТРЕТЬЕ ОКНО',
+  man: 'В ОКНЕ СТОЯЛ ЧЕЛОВЕК', jacket: 'В ЕГО КУРТКЕ', face: 'С ЕГО ЛИЦОМ',
+  twin: 'ДВОЙНИК ПОДНЯЛ РУКУ\nИ ПОКАЗАЛ НА ЧАСЫ', was: 'НА НИХ БЫЛО…',
+};
+const RED_WORDS = ['3:07', '3:06', 'НЕ ВКЛЮЧАЙ', 'ЛИЦОМ', 'ДВОЙНИК'];
+function captions(t) {
+  if (t >= C.end + 0.2) return;
+  const ids = Object.keys(CAPS).filter(k => C[k] !== undefined && C[k] <= t + 0.05);
+  if (!ids.length) return;
+  const id = ids.reduce((a, b) => (C[a] > C[b] ? a : b));
+  const k = easeOut(prog(t, C[id] - 0.05, 0.16));
+  const lines = CAPS[id].split('\n');
+  const y0 = id === 'hook' || id === 'hook2' ? 1420 : 1560;
+  ctx.save(); ctx.translate(W / 2, y0); ctx.scale(lerp(0.85, 1, k), lerp(0.85, 1, k)); ctx.globalAlpha = k;
+  lines.forEach((ln, i) => {
+    const red = RED_WORDS.some(w => ln.includes(w));
+    text(ln, 0, i * 92 - (lines.length - 1) * 46, id === '306' ? 120 : 76, red ? '#ff4a3d' : '#ffffff', { stroke: 14, weight: 700, ls: 1 });
+  });
+  ctx.restore();
+}
+
+// ---------- scene list + transitions ----------
+function sceneAt(t) {
+  if (t < C.city) return ['hook', sceneHook];
+  if (t < C.max) return ['city', sceneCity];
+  if (t < C.phone) return ['control', sceneControl];
+  if (t < C.car) return ['phone', scenePhone];
+  if (t < C.clock) return ['car', sceneCar];
+  if (t < C.walk) return ['clocks', sceneClocks];
+  if (t < C.floor) return ['walk', sceneWalk];
+  if (t < C.man) return ['facade', sceneFacade];
+  if (t < C.twin) return ['window', sceneWindow];
+  if (t < C.end + 0.25) return ['twin', sceneTwin];
+  return ['end', sceneEnd];
+}
+const CUTS = () => [C.city, C.max, C.phone, C.car, C.clock, C.clock + 1.2, C.walk, C.floor, C.man, C.twin, C.was, C.end + 0.25];
+
+window.render = function (t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  const [, fn] = sceneAt(t);
+  // global shake on impacts
+  const [sx, sy] = [shake(t, 0.05, 26, 0.5), shake(t, C.hook2, 22, 0.5), shake(t, C['306'], 26, 0.6)]
+    .reduce((a, b) => [a[0] + b[0], a[1] + b[1]], [0, 0]);
+  ctx.save(); ctx.translate(sx, sy); fn(t); ctx.restore();
+
+  // fade to black before "Часть 2"
+  if (t > C.end - 0.1 && t < C.end + 0.25) rect(0, 0, W, H, `rgba(0,0,0,${prog(t, C.end - 0.1, 0.3)})`);
+
+  // cut glitch: 3 frames of torn, shifted image around every cut
+  const cut = CUTS().find(c => t >= c && t < c + 0.1);
+  if (cut !== undefined) {
+    for (let i = 0; i < 9; i++) {
+      const y = hash(i * 13 + cut * 7 + Math.floor(t * 30)) * H, h = 20 + hash(i + cut) * 120;
+      ctx.drawImage(cv, 0, y, W, h, (hash(i * 3 + Math.floor(t * 30)) - 0.5) * 120, y, W, h);
+    }
+    rect(0, 0, W, H, 'rgba(255,255,255,0.06)');
+  }
+
+  // overlays: vignette, grain, scanlines, analog flicker
+  ctx.fillStyle = radial(W / 2, H / 2, H * 0.25, H * 0.75, [[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0.75)']]);
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.08; ctx.globalCompositeOperation = 'overlay';
+  ctx.drawImage(grain[Math.floor(t * 30) % grain.length], 0, 0, W, H);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(scan, 0, 0);
+  const fl = noise1(t * 9) * 0.06; rect(0, 0, W, H, `rgba(0,0,0,${fl})`);
+
+  captions(t);
+};
+window.setCues = c => { C = c; };
+window.ready = document.fonts.load('700 50px Oswald').then(() => document.fonts.load('50px DSEG')).then(() => true);
+</script></body></html>
